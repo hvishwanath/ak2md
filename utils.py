@@ -3,9 +3,16 @@ import re
 import json
 import difflib
 import logging
-from constants import Constants
+
+def execute_step(step, *args):
+    try:
+        return step(*args)
+    except Exception as e:
+        logging.error(f'Error executing step {step.__name__}: {e}')
+        raise e
 
 class HandleBarsContextBuilder:
+    TemplateJS_File = 'templateData.js'
     def _extract_context_from_js(self, file_path):
         context_pattern = re.compile(r'var\s+context\s*=\s*({.*?});', re.DOTALL)
         with open(file_path, 'r', encoding='utf-8') as file:
@@ -22,17 +29,17 @@ class HandleBarsContextBuilder:
         return None
     
     def _find_templatedata_js_files(self, root_dir):
-        logging.debug(f"Searching for {Constants.TemplateJS_File} files in {root_dir}")
+        logging.debug(f"Searching for {self.TemplateJS_File} files in {root_dir}")
         context_data = {}
         for dirpath, _, filenames in os.walk(root_dir):
             for filename in filenames:
-                if filename == Constants.TemplateJS_File:
+                if filename == self.TemplateJS_File:
                     file_path = os.path.join(dirpath, filename)
-                    logging.debug(f"Found {Constants.TemplateJS_File} file: {file_path}")
+                    logging.debug(f"Found {self.TemplateJS_File} file: {file_path}")
                     context_dict = self._extract_context_from_js(file_path)
                     if context_dict:
                         context_data[file_path] = context_dict
-        logging.debug(f"Found {len(context_data)} {Constants.TemplateJS_File} files")
+        logging.debug(f"Found {len(context_data)} {self.TemplateJS_File} files")
         return context_data
 
     def __init__(self, root_dir="."):
