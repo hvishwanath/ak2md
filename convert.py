@@ -4,41 +4,16 @@ import shutil
 import re
 import logging
 import subprocess
+import yaml
 
 from pybars import Compiler
-from utils import HandleBarsContextBuilder, execute_step
-
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s -  %(funcName)s - %(lineno)d - %(levelname)s - %(message)s')
-
-exclude_dirs = ['markdown', '.git', 'node_modules', '.history', 'javadoc', 'generated', 'images']
-
-# Function to capitalize the filename and use it as the title
-def get_title_from_filename(filename):
-    return os.path.splitext(os.path.basename(filename))[0].replace('-', ' ').title()
-
-# Function to update the front matter of a Markdown file
-def update_front_matter(filepath):
-    title = get_title_from_filename(filepath)
-    front_matter = Constants.Front_Matter_Template.format(title=title)
-    
-    with open(filepath, 'r') as file:
-        content = file.read()
-    
-    # Remove existing comment and front matter if they exist
-    content = re.sub(r'<!--.*?-->\n*', '', content, flags=re.DOTALL)
-    content = re.sub(r'^---\n.*?\n---\n*', '', content, flags=re.DOTALL | re.MULTILINE)
-    
-    # Write the new comment and front matter
-    with open(filepath, 'w') as file:
-        file.write(f"{front_matter}\n{content}")
+from utils import HandleBarsContextBuilder, execute_step, process_markdown_headings, get_title_from_filename, write_file
 
 def render_handlebars_template(html_content, context):
     logging.debug(f'Rendering Handlebars template with context: {context}')
     compiler = Compiler()
     template = compiler.compile(html_content)
-    return template(context), context
+    return template(context)
 
 def process_ssi_tags(html_content, context):
     base_dir = context.get('base_dir', '.')
@@ -59,8 +34,15 @@ def process_ssi_tags_with_hugo(html_content, context):
     ssi_pattern = re.compile(r'<!--#include virtual="([^"]+\.html)" -->')
     matches = ssi_pattern.findall(html_content)
     for match in matches:
-        md_file = match.replace('.html', '.md')
-        shortcode = f'{{{{< include file="{md_file}" >}}}}'
+        if "generated" in match:
+            # {{< include-html file="static/39/generated/kafka_config.html" >}}
+            hb_context = context.get('hb', {})
+            version = hb_context.get('version', '{}')
+            prefix = f"/static/{version}/"
+            md_file = f"{prefix}{match}"
+        else:
+            md_file = match.replace('.html', '.md')
+        shortcode = f'{{{{< include-html file="{md_file}" >}}}}'
         html_content = html_content.replace(f'<!--#include virtual="{match}" -->', shortcode)
         logging.debug(f'Replaced SSI with Hugo shortcode: {shortcode}')
     return html_content, context
@@ -76,14 +58,14 @@ def convert_html_to_md(html_content, context):
     return markdown_content, context
 
 def process_handlebars_templates(html_content, context):
-
-    logging.debug(f'Processing with Context: {context}')
+    hb_context = context.get('hb', {})
+    logging.debug(f'Processing with Handlebars Context: {hb_context}')
     handlebars_pattern = re.compile(r'<script[^>]*type="text/x-handlebars-template"[^>]*>(.*?)</script>', re.DOTALL)
     matches = handlebars_pattern.findall(html_content)            
     for match in matches:
         logging.debug(f'Found Handlebars template: {match}')
         try:
-            rendered_content, context = render_handlebars_template(match, context)
+            rendered_content = render_handlebars_template(match, hb_context)
         except Exception as e:
             if 'bad escape' in str(e):
                 logging.debug(f"trying to find template keys")
@@ -93,7 +75,7 @@ def process_handlebars_templates(html_content, context):
                 # for each key, replace {{key}} with context[key]
                 # if key is not found in context, replace with ''
                 for key in template_keys:
-                    value = context.get(key, '')
+                    value = hb_context.get(key, '')
                     match = re.sub(r'\{\{' + key + r'\}\}', value, match)
                 rendered_content = match
             else:
@@ -116,16 +98,6 @@ def add_front_matter(markdown_content, context):
     markdown_content = f"{fm_template.format(title=title)}\n{markdown_content}"
     return markdown_content, context
 
-def write_file(dest_file, markdown_content, context):
-    try:
-        dest_file = dest_file.replace('.html', '.md')
-        with open(dest_file, 'w', encoding='utf-8') as md_file:
-            md_file.write(markdown_content)
-        logging.info(f'Converted and saved Markdown file: {dest_file}')
-    except Exception as e:
-        logging.error(f'Error writing file {dest_file}: {e}')
-        raise e
-    
     
 def sanitize_input_html(content, context):
     # TODO: For some reason, the python re.sub() function is not working as expected, shelling out works
@@ -150,38 +122,8 @@ def sanitize_input_html(content, context):
     except subprocess.CalledProcessError as e:
         logging.error(f"Error occurred: {e}")
         raise e
-
-def process_markdown_headings(markdown_content, context):
-    up_level = context.get('up_level', False)
-    remove_numeric = context.get('remove_numeric', False)
-    
-    def bump_heading_level(match):
-        level = len(match.group(1))
-        new_level = max(1, level - 1)  # Ensure the level doesn't go below 1
-        return '#' * new_level + ' ' + match.group(2)
-
-    def remove_numeric_heading(match):
-        heading_text = match.group(2)
-        # Remove numeric headings of the form a., a.b, or a.b.c
-        heading_text = re.sub(r'^\d+(\.\d+)*\.*\s*', '', heading_text)
-        return match.group(1) + ' ' + heading_text
-
-    # Find all headings
-    heading_pattern = re.compile(r'^(#{1,6})\s*(.*)', re.MULTILINE)
-    processed_content = markdown_content
-
-    if up_level:
-        # Bump up heading levels
-        processed_content = heading_pattern.sub(bump_heading_level, processed_content)
-
-    if remove_numeric:
-        # Remove numeric headings
-        processed_content = heading_pattern.sub(remove_numeric_heading, processed_content)
-
-    return processed_content, context
-    
-
-def process_file(src_file, dest_file, hb_context):
+  
+def process_file(src_file, dest_file, static_path, hb_context, rules):
     
     context = {
         "hb": hb_context
@@ -192,6 +134,7 @@ def process_file(src_file, dest_file, hb_context):
     context['base_dir'] = os.path.dirname(src_file)
     context['up_level'] = True
     context['remove_numeric'] = True
+    context['rules'] = rules
     steps = [
         sanitize_input_html,
         process_handlebars_templates,
@@ -201,7 +144,7 @@ def process_file(src_file, dest_file, hb_context):
         process_markdown_headings
     ]
     
-    logging.info(f'Processing file: {src_file}, Destination file: {dest_file}, Context: {context}')
+    logging.info(f'Processing file: {src_file}, Destination file: {dest_file}')
     try:
         with open(src_file, 'r', encoding='utf-8') as html_file:
             html_content = html_file.read()
@@ -214,10 +157,19 @@ def process_file(src_file, dest_file, hb_context):
     except Exception as e:
         logging.error(f'Error processing file: {src_file}, Error: {e}')
         
-def process_directory(src_dir, dest_dir, hb):
-    if os.path.basename(src_dir) in exclude_dirs:
+def process_directory(src_dir, dest_dir, static_path, hb, rules):
+    if os.path.basename(src_dir) in rules.get('exclude_dirs', []):
         logging.info(f'Skipping excluded directory: {src_dir}')
         return
+    
+    if os.path.basename(src_dir) in rules.get('static_dirs', []):
+        logging.info(f'Copying static directory: {src_dir}')
+        # dest_dir in this case is parent directory of src_dir and joined with parent of src_dir
+        parent_dir = os.path.dirname(os.path.abspath(src_dir))
+        dest_dir = os.path.join(os.path.join(static_path, os.path.basename(parent_dir)), os.path.basename(src_dir))
+        shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)
+        return
+        
 
     if not os.path.exists(dest_dir):
         os.makedirs(dest_dir)
@@ -232,44 +184,50 @@ def process_directory(src_dir, dest_dir, hb):
 
         if os.path.isdir(src_path):
             logging.info(f'Processing directory: {src_path}')
-            process_directory(src_path, dest_path, hb)
+            process_directory(src_path, dest_path, static_path, hb, rules)
         elif src_path.endswith('.html'):
             logging.info(f'Processing HTML file: {src_path}')
-            process_file(src_path, dest_path, hb.get_context(src_path))
+            process_file(src_path, dest_path, static_path, hb.get_context(src_path), rules)
         else:
             shutil.copy2(src_path, dest_path)
             logging.info(f'Copied file: {src_path} to {dest_path}')
 
 
-def main(input_path, output_path, hb):
+def pre_process(input_path, output_path, static_path, hb, rules):
     if os.path.isdir(input_path):
         logging.info(f'Starting processing directory: {input_path}')
-        process_directory(input_path, output_path, hb)
+        process_directory(input_path, output_path, static_path, hb, rules)
     elif os.path.isfile(input_path) and input_path.endswith('.html'):
         output_path = os.path.join(output_path, os.path.basename(input_path))
         logging.info(f'Starting processing file: {input_path}')
-        process_file(input_path, output_path, hb.get_context(input_path))
+        process_file(input_path, output_path, static_path, hb.get_context(input_path), rules)
     else:
         logging.error(f'Invalid input path: {input_path}')
 
-# Define source and destination paths
-input_path = '../kafka-site/'
-# /Users/hvishwanath/projects/kafka-site/39/connect.html
-# input_path = '../kafka-site/39/connect.html'  # Change this to your input path
-# input_path = '../kafka-site/39/ops.html'  # Change this to your input path
-# input_path = '../kafka-site/39/documentation.html'  # Change this to your input path
-# input_path = '../kafka-site/39/streams/upgrade-guide.html'  # Change this to your input path
-# input_path = '../kafka-site/test.html'  # Change this to your input path
+if __name__=="__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    rules = yaml.safe_load(open('process.yaml'))
+    
+    # Define source and destination paths
+    input_path = '../kafka-site/'
+    # /Users/hvishwanath/projects/kafka-site/39/connect.html
+    # input_path = '../kafka-site/39/connect.html'  # Change this to your input path
+    # input_path = '../kafka-site/39/ops.html'  # Change this to your input path
+    # input_path = '../kafka-site/39/documentation.html'  # Change this to your input path
+    # input_path = '../kafka-site/39/streams/upgrade-guide.html'  # Change this to your input path
+    # input_path = '../kafka-site/test.html'  # Change this to your input path
 
-# input_path = '../kafka-site/39/design.html'  # Change this to your input path
-output_path = '/Users/hvishwanath/projects/kmd/'  # Change this to your output path
-output_path = '/Users/hvishwanath/projects/content_kafka/'  # Change this to your output path
+    # input_path = '../kafka-site/39/design.html'  # Change this to your input path
+    # output_path = '/Users/hvishwanath/projects/kmd/'  # Change this to your output path
+    output_path = '/Users/hvishwanath/projects/staging/'  # Change this to your output path
+    # output_path = '/tmp/'  # Change this to your output path
+    static_path = os.path.join(output_path, 'static')
 
-# Build HB context
-logging.debug('Building Handlebars context')
-hb = HandleBarsContextBuilder("../kafka-site/")
-logging.debug(f'Handlebars context: {hb}')
+    # Build HB context
+    logging.debug('Building Handlebars context')
+    hb = HandleBarsContextBuilder("../kafka-site/")
+    logging.debug(f'Handlebars context: {hb}')
 
-# Process the input
-main(input_path, output_path, hb)
-logging.info('Processing completed')
+    # Process the input
+    pre_process(input_path, output_path, static_path, hb, rules)
+    logging.info('Processing completed')

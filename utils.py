@@ -56,9 +56,136 @@ class HandleBarsContextBuilder:
         if close_matches:
             return self.context_dict.get(close_matches[0], {})
         return {}
+
+def process_markdown_headings(content, context):
+    # if content is not string, convert it to string
+    if not isinstance(content, str):
+        markdown_content = '\n'.join(content)
+    else:
+        markdown_content = content
+
+    up_level = context.get('up_level', False)
+    remove_numeric = context.get('remove_numeric', False)
     
+    def bump_heading_level(match):
+        level = len(match.group(1))
+        new_level = max(1, level - 1)  # Ensure the level doesn't go below 1
+        return '#' * new_level + ' ' + match.group(2)
+
+    def remove_numeric_heading(match):
+        heading_text = match.group(2)
+        # Remove numeric headings of the form a., a.b, or a.b.c
+        heading_text = re.sub(r'^\d+(\.\d+)*\.*\s*', '', heading_text)
+        return match.group(1) + ' ' + heading_text
+
+    # Find all headings
+    heading_pattern = re.compile(r'^(#{1,6})\s*(.*)', re.MULTILINE)
+    processed_content = markdown_content
+
+    if up_level:
+        # Bump up heading levels
+        processed_content = heading_pattern.sub(bump_heading_level, processed_content)
+
+    if remove_numeric:
+        # Remove numeric headings
+        processed_content = heading_pattern.sub(remove_numeric_heading, processed_content)
+
+    return processed_content, context
+
+def _get_front_matter(context, values):
+    template = context['front_matter']["template"]
+    return template.format(**values)
+
+# Function to update the front matter of a Markdown file
+def update_front_matter(content, context):
+    # Remove existing comment and front matter if they exist
+    content = re.sub(r'<!--.*?-->\n*', '', content, flags=re.DOTALL)
+    content = re.sub(r'^---\n.*?\n---\n*', '', content, flags=re.DOTALL | re.MULTILINE)
+    front_matter = _get_front_matter(context, context["template_values"])
+    
+    return f"{front_matter}\n{content}", context
+
+def split_markdown_by_heading(content, context):
+    heading_level = context["section"]["strategy_params"][0]
+    heading_pattern = re.compile(rf'^({"#" * heading_level} )(.+)$') 
+    lines = content.split('\n')
+    out = []
+    current_title = None
+    counter = 1
+    
+    def write_to_file(title, content):
+        fn = title.strip().lower().replace(' ', '-')
+        output_file_name = os.path.join(context["section_dir"], f"{fn}.md")
+        out, _= process_markdown_headings(content, context)
+        template_values = {
+            "title": title,
+            "description": title,
+            "tags": context["front_matter"]["tags"], 
+            "aliases": "",
+            "weight": counter,
+            "type": context["section"].get("type", "docs"),
+            "keywords": ""
+        }
+        context["template_values"] = template_values
+        out, _ = update_front_matter(out, context)
+        with open(output_file_name, 'w') as file:
+            file.writelines(out)
+
+    for line in lines:
+        match = heading_pattern.match(line)
+        if match:
+            if current_title:
+                write_to_file(current_title, out)
+                counter += 1
+            current_title = match.group(2)
+            out = [line]
+        else:
+            out.append(line)
+    
+    if current_title:
+        write_to_file(current_title, out) 
+    
+    return "", context
+
+def process_markdown_links(content, context):
+    link_updates = context.get('link_updates', [])
+    for update in link_updates:
+        search_string = update.get('search_string', '')
+        action = update.get('action', '')
+        value = update.get('value', '')
+        if action == 'prefix':
+            content = _update_with_prefix_links_in_markdown(content, search_string, value)
+    return content, context
+        
+def _update_with_prefix_links_in_markdown(content, search_string, prefix):
+    # Regex to find markdown links
+    link_pattern = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
+    
+    def replace_link(match):
+        text, url = match.groups()
+        if search_string in url and not url.startswith(prefix):
+            url = prefix + url
+        return f'[{text}]({url})'
+
+    updated_content = link_pattern.sub(replace_link, content)
+    return updated_content
+
+def get_title_from_filename(filename):
+    return os.path.splitext(os.path.basename(filename))[0].replace('-', ' ').title()
+
+def write_file(dest_file, markdown_content, context):
+    try:
+        dest_file = dest_file.replace('.html', '.md')
+        with open(dest_file, 'w', encoding='utf-8') as md_file:
+            md_file.write(markdown_content)
+        logging.info(f'Converted and saved Markdown file: {dest_file}')
+    except Exception as e:
+        logging.error(f'Error writing file {dest_file}: {e}')
+        raise e
+
+
 if __name__=="__main__":
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     builder = HandleBarsContextBuilder("../kafka-site/")
     print(builder)
     print(builder.get_context('/Users/hvishwanath/projects/kafka-site/39/design.html'))

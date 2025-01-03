@@ -1,0 +1,174 @@
+---
+auto_weight: true
+exclude_dirs: ['markdown', '.git', 'node_modules', '.history', 'images']
+static_dirs: ['generated', 'javadoc']
+doc_dirs:
+  - "32"
+  - "35"
+  - "34"
+  - "33"
+  - "082"
+  - "090"
+  - "20"
+  - "27"
+  - "11"
+  - "0100"
+  - "28"
+  - "0101"
+  - "10"
+  - "26"
+  - "21"
+  - "07"
+  - "38"
+  - "36"
+  - "31"
+  - "30"
+  - "37"
+  - "08"
+  - "0110"
+  - "39"
+  - "081"
+  - "24"
+  - "23"
+  - "0102"
+  - "22"
+  - "25"
+front_matter:
+  template: |
+    ---
+    title: {title}
+    description: {description}
+    weight: {weight}
+    tags: {tags}
+    aliases: {aliases}
+    keywords: {keywords}
+    type: {type}
+    ---
+  tags:
+    - kafka
+    - docs
+link_updates:
+  - search_str: "/javadoc/"
+    action: prefix
+    value: "/static"
+sections:
+  - name: getting-started
+    title: Getting Started
+    description: "This section provides an overview of what Kafka is, why it is useful, and how to get started using it."
+    strategy: arrange
+    strategy_params: []
+    tags:
+      - getting-started
+    files:
+      - name: introduction
+        title: Introduction
+        file: introduction.md
+        processors: []
+      - name: use-cases
+        title: Use Cases
+        file: uses.md
+      - name: quick-start
+        title: Quick Start
+        file: quickstart.md
+      - name: ecosystem
+        title: Ecosystem
+        file: ecosystem.md
+      - name: upgrading
+        title: Upgrading
+        file: upgrade.md
+      - name: docker
+        title: Docker
+        file: docker.md
+  - name: apis
+    title: APIs
+    tags:
+      - apis
+    strategy: arrange
+    strategy_params: []
+    files:
+      - name: api
+        title: API
+        file: api.md
+        processors: []
+
+  - name: configuration
+    title: Configuration
+    tags:
+      - configuration
+    strategy: arrange
+    strategy_params: []
+    files:
+      - name: configuration
+        title: Configuration
+        file: configuration.md
+        processors: []
+
+  - name: design
+    title: Design
+    tags:
+      - design
+    strategy: arrange
+    strategy_params: []
+    files:
+      - name: design
+        title: Design
+        file: design.md
+        processors: []
+
+  - name: implementation
+    title: Implementation
+    additional_tags:
+      - implementation
+    strategy: split_markdown_by_heading
+    # split by heading level 2
+    strategy_params: [2]
+    file: implementation.md
+
+  - name: operations
+    title: Operations
+    additional_tags:
+      - ops
+    strategy: split_markdown_by_heading
+    # split by heading level 2
+    strategy_params: [2]
+    file: ops.md
+
+  - name: security
+    title: Security
+    additional_tags:
+      - security
+    strategy: split_markdown_by_heading
+    # split by heading level 2
+    strategy_params: [2]
+    file: security.md
+
+  - name: kafka-connect
+    title: Kafka Connect
+    additional_tags:
+      - security
+    strategy: split_markdown_by_heading
+    # split by heading level 2
+    strategy_params: [2]
+    file: connect.md
+
+  # - name: kafka-streams
+  #   title: Kafka Streams
+  #   files:
+  #     - name: play-with-a-streams-application
+  #       title: Play with a Streams Application
+  #       files: []
+  #     - name: write-your-own-streams-applications
+  #       title: Write your own Streams Applications
+  #       files: []
+  #     - name: developer-manual
+  #       title: Developer Manual
+  #       files: []
+  #     - name: core-concepts
+  #       title: Core Concepts
+  #       files: []
+  #     - name: architecture
+  #       title: Architecture
+  #       files: []
+  #     - name: upgrade-guide
+  #       title: Upgrade Guide
+  #       files: []
