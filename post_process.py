@@ -50,11 +50,14 @@ def process_section(context):
             }
             
             context["template_values"] = template_values
-            src_file = os.path.join(context['src_dir'], n['file'])
+            src_file = os.path.join(context['src_dir'], n['src_file'])
             if not os.path.exists(src_file):
                 logging.info(f'File not found: {src_file}, continuing processing...')
                 continue
-            dest_file = os.path.join(context["section_dir"], n['file'])
+            if "dst_file" in n:
+                dest_file = os.path.join(context["section_dir"], n['dst_file'])
+            else:
+                dest_file = os.path.join(context["section_dir"], n['src_file'])
             logging.info(f'Processing file: {src_file}, Destination file: {dest_file}')
             try:
                 with open(src_file, 'r', encoding='utf-8') as html_file:
@@ -71,7 +74,7 @@ def process_section(context):
         steps = [
             split_markdown_by_heading,
         ]
-        src_file = os.path.join(context['src_dir'], context['section']['file'])                 
+        src_file = os.path.join(context['src_dir'], context['section']['src_file'])
         if not os.path.exists(src_file):
             logging.info(f'File not found: {src_file}, continuing processing...')
             return
@@ -83,11 +86,17 @@ def process_section(context):
          
         except Exception as e:
             logging.error(f'Error processing file: {src_file}, Error: {e}')
-            raise e
+            raise e        
 
-
-def post_process(input_path, output_path, static_path, rules):    
+def post_process(input_path, output_path, static_path, rules):
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    if not os.path.exists(input_path):
+        logging.error(f'Input path does not exist: {input_path}')
+        return 
     for dir in rules.get('doc_dirs'):
+        if not os.path.exists(os.path.join(output_path, dir)):
+            os.makedirs(os.path.join(output_path, dir))
         index_file = os.path.join(output_path, dir, '_index.md')
         if len(dir) == 4:
             doc_version = f"{dir[0]}.{dir[1]}{dir[2]}.{dir[3]}.X"

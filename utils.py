@@ -117,6 +117,8 @@ def split_markdown_by_heading(content, context):
         fn = title.strip().lower().replace(' ', '-')
         output_file_name = os.path.join(context["section_dir"], f"{fn}.md")
         out, _= process_markdown_headings(content, context)
+        out, _= process_markdown_links(out, context)
+
         template_values = {
             "title": title,
             "description": title,
@@ -149,22 +151,30 @@ def split_markdown_by_heading(content, context):
 
 def process_markdown_links(content, context):
     link_updates = context.get('link_updates', [])
+    # logging.info(f'Processing markdown links: {link_updates}')
     for update in link_updates:
-        search_string = update.get('search_string', '')
+        search_string = update.get('search_str', '')
         action = update.get('action', '')
         value = update.get('value', '')
-        if action == 'prefix':
-            content = _update_with_prefix_links_in_markdown(content, search_string, value)
+        content = _update_links_in_markdown(content, search_string, value, action)
     return content, context
         
-def _update_with_prefix_links_in_markdown(content, search_string, prefix):
+def _update_links_in_markdown(content, search_string, value, action):
     # Regex to find markdown links
     link_pattern = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
-    
     def replace_link(match):
         text, url = match.groups()
-        if search_string in url and not url.startswith(prefix):
-            url = prefix + url
+        if action == 'prefix' and search_string in url and not url.startswith(value):
+            url = value + url
+        elif action == 'replace' and search_string in url:
+            url = value
+        elif action == 'substitute':
+            url = re.sub(search_string, value, url)
+        
+        logging.info(f'Updating links in markdown content: {action} {search_string} -> {value}') 
+        logging.info(f'[BEFORE] {match.group(0)}')
+        logging.info(f'[AFTER] [{text}]({url})')
+
         return f'[{text}]({url})'
 
     updated_content = link_pattern.sub(replace_link, content)

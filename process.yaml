@@ -51,6 +51,12 @@ link_updates:
   - search_str: "/javadoc/"
     action: prefix
     value: "/static"
+  - search_str: "/protocol.md"
+    action: replace
+    value: "../design/protocol.md"
+  - search_str: "/documentation/"
+    action: substitute
+    value: "/"
 sections:
   - name: getting-started
     title: Getting Started
@@ -62,23 +68,23 @@ sections:
     files:
       - name: introduction
         title: Introduction
-        file: introduction.md
+        src_file: introduction.md
         processors: []
       - name: use-cases
         title: Use Cases
-        file: uses.md
+        src_file: uses.md
       - name: quick-start
         title: Quick Start
-        file: quickstart.md
+        src_file: quickstart.md
       - name: ecosystem
         title: Ecosystem
-        file: ecosystem.md
+        src_file: ecosystem.md
       - name: upgrading
         title: Upgrading
-        file: upgrade.md
+        src_file: upgrade.md
       - name: docker
         title: Docker
-        file: docker.md
+        src_file: docker.md
   - name: apis
     title: APIs
     tags:
@@ -88,7 +94,7 @@ sections:
     files:
       - name: api
         title: API
-        file: api.md
+        src_file: api.md
         processors: []
 
   - name: configuration
@@ -100,7 +106,7 @@ sections:
     files:
       - name: configuration
         title: Configuration
-        file: configuration.md
+        src_file: configuration.md
         processors: []
 
   - name: design
@@ -112,63 +118,138 @@ sections:
     files:
       - name: design
         title: Design
-        file: design.md
+        src_file: design.md
+        processors: []
+      - name: protocol
+        title: Protocol
+        src_file: protocol.md
         processors: []
 
   - name: implementation
     title: Implementation
-    additional_tags:
+    tags:
       - implementation
     strategy: split_markdown_by_heading
     # split by heading level 2
     strategy_params: [2]
-    file: implementation.md
+    src_file: implementation.md
 
   - name: operations
     title: Operations
-    additional_tags:
+    tags:
       - ops
     strategy: split_markdown_by_heading
     # split by heading level 2
     strategy_params: [2]
-    file: ops.md
+    src_file: ops.md
 
   - name: security
     title: Security
-    additional_tags:
+    tags:
       - security
     strategy: split_markdown_by_heading
     # split by heading level 2
     strategy_params: [2]
-    file: security.md
+    src_file: security.md
 
   - name: kafka-connect
     title: Kafka Connect
-    additional_tags:
+    tags:
       - security
     strategy: split_markdown_by_heading
     # split by heading level 2
     strategy_params: [2]
-    file: connect.md
+    src_file: connect.md
 
-  # - name: kafka-streams
-  #   title: Kafka Streams
-  #   files:
-  #     - name: play-with-a-streams-application
-  #       title: Play with a Streams Application
-  #       files: []
-  #     - name: write-your-own-streams-applications
-  #       title: Write your own Streams Applications
-  #       files: []
-  #     - name: developer-manual
-  #       title: Developer Manual
-  #       files: []
-  #     - name: core-concepts
-  #       title: Core Concepts
-  #       files: []
-  #     - name: architecture
-  #       title: Architecture
-  #       files: []
-  #     - name: upgrade-guide
-  #       title: Upgrade Guide
-  #       files: []
+  - name: streams
+    title: Kafka Streams
+    tags:
+      - streams
+    strategy: arrange
+    strategy_params: []
+    files:
+      - name: introduction
+        title: Introduction
+        src_file: streams/index.md
+        dst_file: introduction.md
+      - name: quickstart
+        title: Quick Start
+        src_file: streams/quickstart.md
+        dst_file: quickstart.md
+      - name: tutorial
+        title: Write a streams app
+        src_file: streams/tutorial.md 
+        dst_file: tutorial.md
+      - name: concepts
+        title: Core Concepts
+        src_file: streams/core-concepts.md
+        dst_file: core-concepts.md
+      - name: architecture
+        title: Architecture
+        src_file: streams/architecture.md
+        dst_file: architecture.md
+      - name: upgrade-guide
+        title: Upgrade Guide
+        src_file: streams/upgrade-guide.md
+        dst_file: upgrade-guide.md
+
+  - name: streams/developer-guide
+    title: Streams Developer Guide
+    tags:
+      - streams
+      - developer-guide
+    strategy: arrange
+    strategy_params: []
+    files:
+      - name: write-streams-app
+        title: Writing a Streams Application
+        src_file: streams/developer-guide/write-streams.md
+        dst_file: write-streams-app.md
+      - name: config-streams-app
+        title: Configuring a Streams Application
+        src_file: streams/developer-guide/config-streams.md
+        dst_file: config-streams.md
+      - name: dsl-api
+        title: Streams DSL
+        src_file: streams/developer-guide/dsl-api.md
+        dst_file: dsl-api.md
+      - name: processor-api
+        title: Processor API
+        src_file: streams/developer-guide/processor-api.md
+        dst_file: processor-api.md
+      - name: dsl-topology-naming
+        title: Naming Operators in a Streams DSL application
+        src_file: streams/developer-guide/dsl-topology-naming.md
+        dst_file: dsl-topology-naming.md
+      - name: datatypes
+        title: Data Types and Serialization
+        src_file: streams/developer-guide/datatypes.md
+        dst_file: datatypes.md
+      - name: testing
+        title: Testing a Streams Application
+        src_file: streams/developer-guide/testing.md
+        dst_file: testing.md
+      - name: interactive-queries
+        title: Interactive Queries
+        src_file: streams/developer-guide/interactive-queries.md
+        dst_file: interactive-queries.md
+      - name: memory-mgmt
+        title: Memory Management
+        src_file: streams/developer-guide/memory-mgmt.md
+        dst_file: memory-mgmt.md
+      - name: running-app
+        title: Running Streams Applications
+        src_file: streams/developer-guide/running-app.md
+        dst_file: running-app.md
+      - name: manage-topics
+        title: Managing Streams Application Topics
+        src_file: streams/developer-guide/manage-topics.md
+        dst_file: manage-topics.md
+      - name: security
+        title: Streams Security
+        src_file: streams/developer-guide/security.md
+        dst_file: security.md
+      - name: app-reset-tool
+        title: Application Reset Tool
+        src_file: streams/developer-guide/app-reset-tool.md
+        dst_file: app-reset-tool.md
