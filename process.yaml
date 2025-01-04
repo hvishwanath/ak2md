@@ -50,7 +50,7 @@ front_matter:
 link_updates:
   - search_str: "/javadoc/"
     action: prefix
-    value: "/static"
+    value: "/"
   - search_str: "/protocol.md"
     action: replace
     value: "../design/protocol.md"
