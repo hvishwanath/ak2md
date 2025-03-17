@@ -33,6 +33,7 @@ doc_dirs:
   - "0102"
   - "22"
   - "25"
+  - "40"
 front_matter:
   template: |
     ---
