@@ -3,6 +3,10 @@ import re
 import json
 import difflib
 import logging
+import subprocess
+import shutil
+import yaml
+import html2text
 
 def execute_step(step, *args):
     try:
@@ -57,6 +61,10 @@ class HandleBarsContextBuilder:
             return self.context_dict.get(close_matches[0], {})
         return {}
 
+#
+# Markdown Processing Functions
+#
+
 def process_markdown_headings(content, context):
     # if content is not string, convert it to string
     if not isinstance(content, str):
@@ -96,7 +104,6 @@ def _get_front_matter(context, values):
     template = context['front_matter']["template"]
     return template.format(**values)
 
-# Function to update the front matter of a Markdown file
 def update_front_matter(content, context):
     # Remove existing comment and front matter if they exist
     content = re.sub(r'<!--.*?-->\n*', '', content, flags=re.DOTALL)
@@ -193,6 +200,111 @@ def write_file(dest_file, markdown_content, context):
         logging.error(f'Error writing file {dest_file}: {e}')
         raise e
 
+
+def render_handlebars_template(html_content, context):
+    logging.debug(f'Rendering Handlebars template with context: {context}')
+    from pybars import Compiler
+    compiler = Compiler()
+    template = compiler.compile(html_content)
+    return template(context)
+
+def process_ssi_tags(html_content, context):
+    base_dir = context.get('base_dir', '.')
+    ssi_pattern = re.compile(r'<!--#include virtual="([^"]+\.html)" -->')
+    matches = ssi_pattern.findall(html_content)
+    for match in matches:
+        include_path = os.path.join(base_dir, match)
+        if os.path.exists(include_path):
+            with open(include_path, 'r', encoding='utf-8') as include_file:
+                include_content = include_file.read()
+            html_content = html_content.replace(f'<!--#include virtual="{match}" -->', include_content)
+            logging.debug(f'Processed SSI include: {match}')
+        else:
+            logging.warning(f'Include file not found: {include_path}')
+    return html_content, context
+
+def process_ssi_tags_with_hugo(html_content, context):
+    ssi_pattern = re.compile(r'<!--#include virtual="([^"]+\.html)" -->')
+    matches = ssi_pattern.findall(html_content)
+    for match in matches:
+        if "generated" in match:
+            # {{< include-html file="static/39/generated/kafka_config.html" >}}
+            hb_context = context.get('hb', {})
+            version = hb_context.get('version', '{}')
+            prefix = f"/static/{version}/"
+            md_file = f"{prefix}{match}"
+        else:
+            md_file = match.replace('.html', '.md')
+        shortcode = f'{{{{< include-html file="{md_file}" >}}}}'
+        html_content = html_content.replace(f'<!--#include virtual="{match}" -->', shortcode)
+        logging.debug(f'Replaced SSI with Hugo shortcode: {shortcode}')
+    return html_content, context
+
+def convert_html_to_md(html_content, context):
+    h = html2text.HTML2Text()
+    h.ignore_links = False  # Set to True to ignore links
+    h.ignore_images = False  # Set to True to ignore images
+    h.ignore_emphasis = False  # Set to True to ignore emphasis (bold, italic)
+    h.bypass_tables = False  # Set to True to ignore tables
+    h.body_width = 0  # Set to 0 to prevent wrapping
+    markdown_content = h.handle(html_content)
+    return markdown_content, context
+
+def process_handlebars_templates(html_content, context):
+    hb_context = context.get('hb', {})
+    logging.debug(f'Processing with Handlebars Context: {hb_context}')
+    handlebars_pattern = re.compile(r'<script[^>]*type="text/x-handlebars-template"[^>]*>(.*?)</script>', re.DOTALL)
+    matches = handlebars_pattern.findall(html_content)            
+    for match in matches:
+        logging.debug(f'Found Handlebars template: {match}')
+        try:
+            rendered_content = render_handlebars_template(match, hb_context)
+        except Exception as e:
+            if 'bad escape' in str(e):
+                logging.debug(f"trying to find template keys")
+                # try to manually handle potential template strings
+                # construct a regex to match {{x}} kind of strings and collect all the keys
+                template_keys = re.findall(r'\{\{([a-zA-Z0-9_]+)\}\}', match)
+                # for each key, replace {{key}} with context[key]
+                # if key is not found in context, replace with ''
+                for key in template_keys:
+                    value = hb_context.get(key, '')
+                    match = re.sub(r'\{\{' + key + r'\}\}', value, match)
+                rendered_content = match
+            else:
+                raise e
+        try:
+            html_content = handlebars_pattern.sub(rendered_content, html_content, count=1)
+        except Exception as e:
+            logging.error(f'Error replacing Handlebars template: {e}')
+            logging.error(f'Rendered content: {rendered_content[49280:49300]}')
+            logging.error(f'Original HTML : {html_content[49280:49300]}')
+            raise e
+        
+    logging.debug(f'Processed Handlebars template: {html_content}')
+    return html_content, context
+
+def add_front_matter(markdown_content, context):
+    title = context.get('title', 'Untitled')
+    fm_template = """---\ntitle: {title}\ntype: docs\n---\n"""
+    markdown_content = f"{fm_template.format(title=title)}\n{markdown_content}"
+    return markdown_content, context
+
+def sanitize_input_html(content, context):
+    sanitize_list = context.get('rules', {}).get('sanitize_list', [])
+    if context.get('src_file_name') not in sanitize_list:
+        return content, context
+    
+    sed_command = r"sed -E 's/([^\\])\\w/\1\\\\w/g; s/([^\\])\\c/\1\\\\c/g; s/([^\\])\\l/\1\\\\l/g; s/([^\\])\\k/\1\\\\k/g; s/([^\\])\\s/\1\\\\s/g'"
+    try:
+        # Execute the command and capture the output
+        result = subprocess.run(sed_command, input=content, text=True, capture_output=True, shell=True, check=True)
+        logging.info(f'Sanitized HTML content in file: {context.get("src_file_name")}')
+        sanitized_content = result.stdout
+        return sanitized_content, context
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Error occurred: {e}")
+        raise e
 
 if __name__=="__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

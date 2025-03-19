@@ -1,7 +1,8 @@
 ---
 auto_weight: true
-exclude_dirs: ['markdown', '.git', 'node_modules', '.history', 'images']
-static_dirs: ['generated', 'javadoc']
+exclude_dirs: ['markdown', '.git', 'node_modules', '.history']
+static_dirs: ['generated', 'javadoc', 'images', 'diagrams', 'logos']
+sanitize_list: ["ops.html", "index.html", "upgrade-guide.html", "tutorial.html", "connect.html", "quickstart.html"]
 doc_dirs:
   - "32"
   - "35"

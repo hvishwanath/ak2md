@@ -12,8 +12,11 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from utils import HandleBarsContextBuilder
-from convert import pre_process
-from post_process import post_process
+from workflow_steps import (
+    WorkflowStepRegistry, 
+    PreProcessDirectory,
+    ProcessDocVersion
+)
 
 # Configure logging
 logging.basicConfig(
@@ -146,12 +149,6 @@ class CloneStage(WorkflowStage):
                 self.logger.error(f"Failed to checkout branch: {result.stderr}")
                 return False
         
-        # Copy process.yaml to workspace if it doesn't exist
-        rules_dest = self.context.workspace_dir / "process.yaml"
-        if not rules_dest.exists():
-            shutil.copy2("process.yaml", rules_dest)
-            self.logger.info(f"Copied process.yaml to workspace: {rules_dest}")
-        
         return True
 
 class PreProcessStage(WorkflowStage):
@@ -163,15 +160,25 @@ class PreProcessStage(WorkflowStage):
             self.logger.info("Building Handlebars context")
             hb = HandleBarsContextBuilder(str(self.context.source_dir))
             
-            self.logger.info("Starting HTML to Markdown conversion")
-            pre_process(
-                input_path=str(self.context.source_dir),
-                output_path=str(self.context.interim_dir),
+            # Initialize step registry
+            registry = WorkflowStepRegistry()
+            
+            # Process the input directory
+            self.logger.info("Starting HTML to Markdown conversion using granular workflow steps")
+            processor = PreProcessDirectory(
+                src_dir=str(self.context.source_dir),
+                dest_dir=str(self.context.interim_dir),
                 static_path=str(self.context.static_dir),
                 hb=hb,
-                rules=self.context.rules
+                rules=self.context.rules,
+                registry=registry
             )
-            return True
+            
+            result = processor.execute()
+            if not result:
+                self.logger.error("Pre-processing failed")
+            return result
+            
         except Exception as e:
             self.logger.error(f"Pre-processing failed: {str(e)}")
             return False
@@ -181,14 +188,29 @@ class PostProcessStage(WorkflowStage):
     
     def _do_execute(self) -> bool:
         try:
-            self.logger.info("Starting Markdown restructuring")
-            post_process(
-                input_path=str(self.context.interim_dir),
-                output_path=str(self.context.output_dir),
-                static_path=str(self.context.static_dir),
-                rules=self.context.rules
-            )
-            return True
+            # Initialize step registry
+            registry = WorkflowStepRegistry()
+            
+            self.logger.info("Starting Markdown restructuring using granular workflow steps")
+            
+            # Process each doc version
+            success = True
+            for version in self.context.rules.get('doc_dirs', []):
+                self.logger.info(f"Processing documentation version: {version}")
+                processor = ProcessDocVersion(
+                    version=version,
+                    input_path=str(self.context.interim_dir),
+                    output_path=str(self.context.output_dir),
+                    rules=self.context.rules,
+                    registry=registry
+                )
+                
+                if not processor.execute():
+                    self.logger.error(f"Failed to process documentation version: {version}")
+                    success = False
+            
+            return success
+                
         except Exception as e:
             self.logger.error(f"Post-processing failed: {str(e)}")
             return False
@@ -218,12 +240,28 @@ class ValidationStage(WorkflowStage):
             self.logger.info(f"Found {len(static_files)} static files")
         
         # Check for doc version directories
-        doc_dirs = [d for d in self.context.output_dir.iterdir() if d.is_dir() and d.name != "static"]
+            doc_dirs = [d for d in self.context.output_dir.iterdir() if d.is_dir() and d.name != "static"]
         if not doc_dirs:
             self.logger.error("No documentation version directories found")
             return False
             
         self.logger.info(f"Found {len(doc_dirs)} documentation versions")
+        
+        # Check for key sections in each doc version
+        for doc_dir in doc_dirs:
+            section_dirs = [d for d in doc_dir.iterdir() if d.is_dir()]
+            if not section_dirs:
+                self.logger.error(f"No sections found in documentation version: {doc_dir.name}")
+                return False
+                
+            self.logger.info(f"Found {len(section_dirs)} sections in version: {doc_dir.name}")
+            
+            # Check specific key sections that should exist
+            key_sections = ['getting-started', 'apis', 'configuration']
+            missing_sections = [s for s in key_sections if not any(d.name == s for d in section_dirs)]
+            
+            if missing_sections:
+                self.logger.warning(f"Missing key sections in version {doc_dir.name}: {', '.join(missing_sections)}")
         
         return True
 
@@ -234,7 +272,7 @@ class Workflow:
         self.context = WorkflowContext(Path(workspace_dir))
         self.stages = [
             CloneStage("clone", self.context),
-            PreProcessStage("pre-process", self.context),
+                PreProcessStage("pre-process", self.context),
             PostProcessStage("post-process", self.context),
             ValidationStage("validate", self.context)
         ]
@@ -268,13 +306,21 @@ def main():
                        help='Start from a specific stage')
     parser.add_argument('--debug', action='store_true',
                        help='Enable debug logging')
+    parser.add_argument('--skip-validation', action='store_true',
+                       help='Skip validation stage')
     
     args = parser.parse_args()
     
     if args.debug:
         logger.setLevel(logging.DEBUG)
+        # Set debug logging for other loggers
+        logging.getLogger('ak2md-workflow.steps').setLevel(logging.DEBUG)
     
     workflow = Workflow(args.workspace)
+    
+    if args.skip_validation:
+        workflow.stages = [s for s in workflow.stages if not isinstance(s, ValidationStage)]
+    
     success = workflow.run(args.start_stage)
     
     sys.exit(0 if success else 1)
