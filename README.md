@@ -27,21 +27,21 @@ Each stage is further broken down into individual steps that can be customized, 
 
 ```bash
 # Basic usage
-python workflow.py --workspace ./my_workspace
+python main.py --workspace ./my_workspace
 
 # Start from a specific stage
-python workflow.py --workspace ./my_workspace --start-stage pre-process
+python main.py --workspace ./my_workspace --start-stage pre-process
 
 # Enable debug logging
-python workflow.py --workspace ./my_workspace --debug
+python main.py --workspace ./my_workspace --debug
 
 # Skip validation stage
-python workflow.py --workspace ./my_workspace --skip-validation
+python main.py --workspace ./my_workspace --skip-validation
 ```
 
 ### Workflow Components
 
-- **workflow.py** - Main entry point and workflow orchestration
+- **main.py** - Main entry point and workflow orchestration
 - **workflow_steps.py** - Fine-grained steps and processors for each stage
 - **process.yaml** - Configuration for document sections and processing rules
 
@@ -52,6 +52,19 @@ python workflow.py --workspace ./my_workspace --skip-validation
 - **Debuggable** - Detailed logging and clear error messages
 - **Configurable** - Easy to customize through process.yaml
 - **Extensible** - New steps can be easily added to the registry
+
+### Special File Processors
+
+The workflow includes specialized processors for handling unique files:
+
+- **committers.md** - Extracts committer information and generates `data/committers.json`
+- **powered-by.html** - Extracts testimonials from the Powered By page and generates `data/testimonials.json`
+
+These special processors can be run with:
+
+```bash
+python main.py --workspace ./my_workspace --start-stage special-files
+```
 
 ### Static Content Handling
 
@@ -108,6 +121,6 @@ cd ak2md
 pip install -r requirements.txt
 
 # Run the workflow
-python workflow.py
+python main.py
 ```
 

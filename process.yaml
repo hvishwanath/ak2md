@@ -255,3 +255,13 @@ sections:
         title: Application Reset Tool
         src_file: streams/developer-guide/app-reset-tool.md
         dst_file: app-reset-tool.md
+
+# Special files processing configuration
+special_files:
+  - file: committers.md
+    processor: committers
+    input_dir: interim
+  - file: powered-by.html
+    processor: powered-by
+    input_dir: source
+  # Add more special files as needed
