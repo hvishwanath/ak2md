@@ -38,6 +38,11 @@ class Workflow:
                 'file': 'powered-by.html',
                 'processor': 'powered-by',
                 'input_dir': 'source'
+            },
+            {
+                'file': 'blog.md',
+                'processor': 'blog',
+                'input_dir': 'interim'
             }
             # More special files can be added here
         ]

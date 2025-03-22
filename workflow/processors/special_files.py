@@ -5,6 +5,8 @@ import json
 import logging
 import re
 from typing import Dict, Callable, Any, Optional
+from datetime import datetime
+from workflow.context import WorkflowContext
 
 logger = logging.getLogger('ak2md-workflow.steps.special-files')
 
@@ -232,6 +234,160 @@ def process_powered_by(content: str, output_path: str) -> bool:
         logger.error(f"Error processing powered-by.html: {str(e)}")
         return False
 
+# Processor for blog.md
+def process_blog(content: str, output_path: str) -> bool:
+    """Process blog.md to extract individual blog posts.
+    
+    Creates:
+    - blog/_index.md
+    - blog/releases/_index.md
+    - blog/releases/ak-{version}.md for each release announcement
+    """
+    try:
+        # Create necessary directories
+        blog_dir = os.path.join(output_path, "blog")
+        releases_dir = os.path.join(blog_dir, "releases")
+        os.makedirs(blog_dir, exist_ok=True)
+        os.makedirs(releases_dir, exist_ok=True)
+        
+        # Write blog/_index.md
+        blog_index_content = """---
+title: "Blog"
+linkTitle: "Blog"
+weight: 40
+menu:
+  main:
+    weight: 40
+---
+"""
+        with open(os.path.join(blog_dir, "_index.md"), 'w', encoding='utf-8') as f:
+            f.write(blog_index_content)
+        
+        # Write blog/releases/_index.md
+        releases_index_content = """---
+title: "Release Announcements"
+linkTitle: "Release Announcements"
+weight: 10
+menu:
+  main:
+    weight: 10
+---
+"""
+        with open(os.path.join(releases_dir, "_index.md"), 'w', encoding='utf-8') as f:
+            f.write(releases_index_content)
+        
+        # Split content into individual posts (split at level 1 headings)
+        posts = re.split(r'(?m)^# ', content)[1:]  # Skip the first empty split
+        
+        for post in posts:
+            # Extract version from title
+            title_match = re.match(r'^([^\n]+)', post)
+            if not title_match:
+                continue
+                
+            title = title_match.group(1)
+            version_match = re.search(r'(\d+\.\d+\.\d+)', title)
+            if not version_match:
+                continue
+                
+            version = version_match.group(1)
+            
+            # Extract author and date from first line of content
+            content_lines = post.split('\n')
+            if len(content_lines) < 2:
+                continue
+                
+            # Remove the duplicate title line (first line after the heading)
+            content_lines = [line for line in content_lines[1:] if line.strip() != title]
+            
+            # Find the first non-empty line that contains date and author
+            date_line = None
+            for line in content_lines:  # No need to skip title line anymore
+                if line.strip():  # Non-empty line
+                    date_line = line.strip()
+                    break
+            
+            if not date_line:
+                formatted_date = '2025-03-18'  # Fallback date
+                author = 'Apache Kafka Team'  # Fallback author
+                logger.warning(f"Could not find date line for version {version}")
+            else:
+                # Extract date and author using regex
+                date_match = re.search(r'(\d{1,2}\s+\w+\s+\d{4})', date_line)
+                
+                # Try different author formats:
+                # 1. Name (@handle) with Twitter
+                # 2. Name ([@handle](https://twitter.com/handle))
+                # 3. Name ([@handle](https://www.linkedin.com/in/handle/))
+                # 4. Just Name
+                author_match = (
+                    re.search(r'-\s*([^(]+?)\s*\(@([^)]+)\)', date_line) or  # Format 1
+                    re.search(r'-\s*([^(]+?)\s*\(\[@([^]]+)\]', date_line) or  # Format 2
+                    re.search(r'-\s*([^(]+)', date_line)  # Format 4 (fallback)
+                )
+                
+                if date_match and author_match:
+                    date_str = date_match.group(1)
+                    
+                    # Format author name based on what we found
+                    if len(author_match.groups()) > 1:  # We have a handle
+                        author = f"{author_match.group(1).strip()} (@{author_match.group(2)})"
+                    else:  # Just the name
+                        author = author_match.group(1).strip()
+                    
+                    # Convert date to YYYY-MM-DD format
+                    try:
+                        date = datetime.strptime(date_str, '%d %B %Y')
+                        formatted_date = date.strftime('%Y-%m-%d')
+                    except ValueError:
+                        try:
+                            # Try alternate format (e.g., "10 Oct 2023")
+                            date = datetime.strptime(date_str, '%d %b %Y')
+                            formatted_date = date.strftime('%Y-%m-%d')
+                        except ValueError:
+                            formatted_date = '2025-03-18'  # Fallback date if parsing fails
+                            logger.warning(f"Could not parse date '{date_str}' for version {version}, using fallback date")
+                    
+                    # Remove the date line from content
+                    content_lines = [line for line in content_lines if line.strip() != date_line]
+                else:
+                    formatted_date = '2025-03-18'  # Fallback date
+                    author = 'Apache Kafka Team'  # Fallback author
+                    logger.warning(f"Could not extract date and author from line for version {version}, line: '{date_line}'")
+            
+            # Create front matter
+            front_matter = {
+                'date': formatted_date,
+                'title': title,
+                'linkTitle': f'AK {version}',
+                'author': author
+            }
+            
+            # Convert level 1 headings to level 2
+            content = '\n'.join(content_lines)
+            content = re.sub(r'^# ', '## ', content, flags=re.MULTILINE)
+            
+            # Write the blog post
+            post_file = os.path.join(releases_dir, f'ak-{version}.md')
+            with open(post_file, 'w', encoding='utf-8') as f:
+                f.write(f"""---
+date: {front_matter['date']}
+title: {front_matter['title']}
+linkTitle: {front_matter['linkTitle']}
+author: {front_matter['author']}
+---
+
+{content}
+""")
+            logger.info(f"Created blog post: ak-{version}.md")
+            
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error processing blog.md: {str(e)}")
+        return False
+
 # Register processors
-register_special_file_processor("committers", process_committers)
-register_special_file_processor("powered-by", process_powered_by) 
+register_special_file_processor("committers", process_committers) 
+register_special_file_processor("powered-by", process_powered_by)
+register_special_file_processor("blog", process_blog) 
