@@ -7,6 +7,7 @@ import re
 from typing import Dict, Callable, Any, Optional
 from datetime import datetime
 from workflow.context import WorkflowContext
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger('ak2md-workflow.steps.special-files')
 
@@ -59,73 +60,90 @@ class ProcessSpecialFiles:
             self.logger.error(f"Error processing special file {self.file_name}: {str(e)}")
             return False
 
-# Processor for committers.md
+# Processor for committers.html
 def process_committers(content: str, output_path: str) -> bool:
-    """Process committers.md and create data/committers.json"""
+    """Process committers.html and create data/committers.json
+    
+    This function parses the HTML content of committers.html and extracts
+    information about each committer, including their image, name, title,
+    and social links, and writes it to a JSON file.
+    """
     try:
         # Ensure data directory exists
         data_dir = os.path.join(output_path, "data")
         os.makedirs(data_dir, exist_ok=True)
         
-        # Parse the markdown content
+        # Use BeautifulSoup to parse the HTML content
+        soup = BeautifulSoup(content, 'html.parser')
+        
+        # Find the table containing committer information
+        table = soup.find('table')
+        if not table:
+            logger.error("Could not find committers table in HTML content")
+            return False
+        
+        # Parse each row (tr) in the table
         committers = []
-        lines = content.split('\n')
-        
-        # Skip front matter and heading
-        start_idx = 0
-        for i, line in enumerate(lines):
-            if line.strip() == '# The committers':
-                start_idx = i + 1
-                break
-        
-        # Process in pairs (image/info rows)
-        i = start_idx
-        while i < len(lines) - 1:
-            line = lines[i].strip()
-            if not line or line == '---|---|---|---':
-                i += 1
-                continue
+        for row in table.find_all('tr'):
+            # Each row has two committers, with alternating td elements for image and info
+            tds = row.find_all('td')
+            
+            # Process in pairs (image td, info td)
+            for i in range(0, len(tds), 2):
+                if i + 1 >= len(tds):
+                    continue  # Skip if no paired td for info
                 
-            # Check if this is an image row
-            if line.startswith('![]('):
+                img_td = tds[i]
+                info_td = tds[i + 1]
+                
                 # Extract image path
-                image_match = line.split('|')[0].strip()
-                image_path = image_match.replace('![](', '').replace(')', '')
+                img_tag = img_td.find('img')
+                if not img_tag:
+                    continue  # Skip if no image found
                 
-                # Extract name from next part
-                name_part = line.split('|')[1].strip()
-                name = name_part
+                image_path = img_tag.get('src', '')
                 
-                # Username and title are on the next lines
-                username = lines[i+1].strip()
-                title = lines[i+2].strip()
+                # Get all text content and split into lines
+                info_text = info_td.get_text().strip()
+                lines = [line.strip() for line in info_text.split('\n') if line.strip()]
                 
-                # Check for social links
+                # The first line is the name
+                name = lines[0] if lines else ""
+                
+                # Find the title, which is usually after the github login
+                title = ""
+                for j, line in enumerate(lines):
+                    # Skip github_login which is in a hidden div
+                    if "github_login" in str(info_td):
+                        # The title is usually 2 positions after the name
+                        if j >= 2 and not any(word in line.lower() for word in ["@", "/in/", "github.com", "hachyderm.io"]):
+                            title = line
+                            break
+                    else:
+                        # If no github_login, title is usually right after the name
+                        if j >= 1 and not any(word in line.lower() for word in ["@", "/in/", "github.com", "hachyderm.io"]):
+                            title = line
+                            break
+                
+                # Initialize social links
                 linkedin = None
                 twitter = None
                 github = None
                 website = None
-                mastodon = None
                 
-                # Process next lines for links
-                j = i + 3
-                while j < len(lines) and not lines[j].strip().startswith('![]('):
-                    link_line = lines[j].strip()
-                    if '[/in/' in link_line:
-                        linkedin = link_line.split('](')[1].split(')')[0]
-                    elif '[@' in link_line and 'hachyderm.io' in link_line:
-                        mastodon = link_line.split('](')[1].split(')')[0]
-                    elif '[@' in link_line:
-                        twitter = link_line.split('](')[1].split(')')[0]
-                    elif '[github.com/' in link_line:
-                        github = link_line.split('](')[1].split(')')[0]
-                    elif '[' in link_line and '](' in link_line and not any(x in link_line for x in ['@', '/in/', 'github']):
-                        website = link_line.split('](')[1].split(')')[0]
-                    j += 1
+                # Extract social links
+                for link in info_td.find_all('a'):
+                    href = link.get('href', '')
+                    link_text = link.get_text().strip()
                     
-                    # If we hit a table separator or empty line, move to next row
-                    if link_line == '---|---|---|---' or link_line == '':
-                        break
+                    if 'linkedin.com' in href:
+                        linkedin = href
+                    elif 'twitter.com' in href or link_text.startswith('@'):
+                        twitter = href
+                    elif 'github.com' in href:
+                        github = href
+                    elif not any(x in href for x in ['linkedin.com', 'twitter.com', 'github.com']):
+                        website = href
                 
                 # Create committer object
                 committer = {
@@ -141,15 +159,9 @@ def process_committers(content: str, output_path: str) -> bool:
                     committer["github"] = github
                 if website:
                     committer["website"] = website
-                if mastodon:
-                    committer["mastodon"] = mastodon
                 
+                # Add to committers list
                 committers.append(committer)
-                
-                # Move to next row
-                i = j
-            else:
-                i += 1
         
         # Write to JSON file
         output_file = os.path.join(data_dir, "committers.json")
@@ -160,7 +172,9 @@ def process_committers(content: str, output_path: str) -> bool:
         return True
     
     except Exception as e:
-        logger.error(f"Error processing committers.md: {str(e)}")
+        logger.error(f"Error processing committers.html: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 # Processor for powered-by.html
@@ -245,7 +259,7 @@ def process_blog(content: str, output_path: str) -> bool:
     """
     try:
         # Create necessary directories
-        blog_dir = os.path.join(output_path, "blog")
+        blog_dir = os.path.join(output_path, "content", "en", "blog")
         releases_dir = os.path.join(blog_dir, "releases")
         os.makedirs(blog_dir, exist_ok=True)
         os.makedirs(releases_dir, exist_ok=True)

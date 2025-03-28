@@ -258,9 +258,9 @@ sections:
 
 # Special files processing configuration
 special_files:
-  - file: committers.md
+  - file: committers.html
     processor: committers
-    input_dir: interim
+    input_dir: source
   - file: powered-by.html
     processor: powered-by
     input_dir: source

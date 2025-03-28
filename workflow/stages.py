@@ -106,7 +106,7 @@ class PostProcessStage(WorkflowStage):
                 processor = ProcessDocVersion(
                     version=version,
                     input_path=str(self.context.interim_dir),
-                    output_path=str(self.context.output_dir),
+                    output_path=str(self.context.output_dir / "content" / "en"),
                     rules=self.context.rules,
                     registry=registry
                 )
