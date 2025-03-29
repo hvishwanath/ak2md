@@ -282,9 +282,6 @@ menu:
 title: "Release Announcements"
 linkTitle: "Release Announcements"
 weight: 10
-menu:
-  main:
-    weight: 10
 ---
 """
         with open(os.path.join(releases_dir, "_index.md"), 'w', encoding='utf-8') as f:
