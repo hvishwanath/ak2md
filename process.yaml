@@ -84,6 +84,14 @@ sections:
       - name: upgrading
         title: Upgrading
         src_file: upgrade.md
+      - name: kraft-vs-zk
+        title: KRaft vs ZooKeeper
+        src_file: documentation/zk2kraft.md
+        dst_file: zk2kraft.md
+      - name: compatibility
+        title: Compatibility
+        src_file: documentation/compatibility.md
+        dst_file: compatibility.md
       - name: docker
         title: Docker
         src_file: docker.md
