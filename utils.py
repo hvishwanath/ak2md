@@ -84,15 +84,53 @@ def process_markdown_headings(content, context):
         heading_text = match.group(2)
         # Remove numeric headings of the form a., a.b, or a.b.c
         heading_text = re.sub(r'^\d+(\.\d+)*\.*\s*', '', heading_text)
-        return match.group(1) + ' ' + heading_text
+        return '#' * len(match.group(1)) + ' ' + heading_text
 
     # Find all headings
     heading_pattern = re.compile(r'^(#{1,6})\s*(.*)', re.MULTILINE)
     processed_content = markdown_content
 
     if up_level:
-        # Bump up heading levels
-        processed_content = heading_pattern.sub(bump_heading_level, processed_content)
+        lines = markdown_content.split('\n')
+        processed_lines = []
+        in_migration_section = False
+        
+        for line in lines:
+            heading_match = re.match(r'^(#{1,6})\s+(.+)$', line)
+            if heading_match:
+                heading_text = heading_match.group(2).strip()
+                heading_level = len(heading_match.group(1))
+                
+                # Check if we're entering the migration section
+                if heading_text == "ZooKeeper to KRaft Migration":
+                    in_migration_section = True
+                    # Set this heading to h3 level
+                    processed_lines.append('### ' + heading_text)
+                    continue
+                
+                # Check if we're exiting the migration section
+                # Exit when we encounter Tiered Storage (regardless of heading level or numeric prefix)
+                # or when we encounter a true h2 heading (not Tiered Storage)
+                if in_migration_section and ("Tiered Storage" in heading_text or (heading_level == 2 and "Tiered Storage" not in heading_text)):
+                    in_migration_section = False
+                    # Apply normal upleveling for the heading that caused us to exit
+                    processed_lines.append(bump_heading_level(heading_match))
+                    continue
+                
+                # If we're in the migration section, don't uplevel subsections - keep them at h4
+                if in_migration_section:
+                    # Keep subsections at h4 level (don't uplevel them)
+                    if heading_level >= 2:  # If it's h2 or higher, set it to h4
+                        processed_lines.append('#### ' + heading_text)
+                    else:
+                        processed_lines.append(line)  # Keep original level if it's already h3 or lower
+                else:
+                    # Apply normal upleveling for headings outside the migration section
+                    processed_lines.append(bump_heading_level(heading_match))
+            else:
+                processed_lines.append(line)
+        
+        processed_content = '\n'.join(processed_lines)
 
     if remove_numeric:
         # Remove numeric headings
@@ -143,10 +181,11 @@ def split_markdown_by_heading(content, context):
     for line in lines:
         match = heading_pattern.match(line)
         if match:
+            heading_text = match.group(2).strip()
             if current_title:
                 write_to_file(current_title, out)
                 counter += 1
-            current_title = match.group(2)
+            current_title = heading_text
             out = [line]
         else:
             out.append(line)
