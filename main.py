@@ -43,6 +43,11 @@ class Workflow:
                 'file': 'blog.md',
                 'processor': 'blog',
                 'input_dir': 'interim'
+            },
+            {
+                'file': 'cve-list.md',
+                'processor': 'cve-list',
+                'input_dir': 'interim'
             }
             # More special files can be added here
         ]

@@ -275,4 +275,7 @@ special_files:
   - file: blog.md
     processor: blog
     input_dir: interim
+  - file: cve-list.md
+    processor: cve-list
+    input_dir: interim
   # Add more special files as needed

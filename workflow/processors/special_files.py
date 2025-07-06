@@ -398,7 +398,65 @@ author: {front_matter['author']}
         logger.error(f"Error processing blog.md: {str(e)}")
         return False
 
+# Processor for cve-list.md
+def process_cve_list(content: str, output_path: str) -> bool:
+    """Process cve-list.md with special formatting requirements
+    
+    This function processes the cve-list.md file with the following changes:
+    1. Changes the title to "CVE List"
+    2. Bumps down all headings (h1 -> h2, h2 -> h3, etc.)
+    3. Outputs to the content/en/community/ directory
+    """
+    try:
+        # Ensure community directory exists
+        community_dir = os.path.join(output_path, "content", "en", "community")
+        os.makedirs(community_dir, exist_ok=True)
+        
+        logger.info(f"Processing cve-list.md, content length: {len(content)} characters")
+        
+        # Update the front matter title
+        content = re.sub(
+            r'title: Cve List',
+            'title: CVE List',
+            content
+        )
+        
+        # Bump down all headings (h1 -> h2, h2 -> h3, etc.) and add anchor IDs for CVEs
+        # Use regex to find all heading patterns and add one more #
+        def bump_heading_level(match):
+            level = len(match.group(1))
+            new_level = min(6, level + 1)  # Ensure the level doesn't exceed 6
+            heading_text = match.group(2)
+            
+            # Check if this is a CVE heading (contains CVE-XXXX-XXXXX pattern)
+            cve_match = re.search(r'CVE-\d{4}-\d+', heading_text)
+            if cve_match:
+                cve_id = cve_match.group(0)
+                # Add anchor ID to the heading
+                return '#' * new_level + ' ' + heading_text + ' {#' + cve_id + '}'
+            else:
+                return '#' * new_level + ' ' + heading_text
+        
+        # Find all headings and bump them down
+        heading_pattern = re.compile(r'^(#{1,6})\s+(.+)$', re.MULTILINE)
+        content = heading_pattern.sub(bump_heading_level, content)
+        
+        # Write to community directory
+        output_file = os.path.join(community_dir, "cve-list.md")
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(content)
+            
+        logger.info(f"Successfully processed cve-list.md and saved to {output_file}")
+        return True
+    
+    except Exception as e:
+        logger.error(f"Error processing cve-list.md: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
 # Register processors
 register_special_file_processor("committers", process_committers) 
 register_special_file_processor("powered-by", process_powered_by)
-register_special_file_processor("blog", process_blog) 
+register_special_file_processor("blog", process_blog)
+register_special_file_processor("cve-list", process_cve_list) 
