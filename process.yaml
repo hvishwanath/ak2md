@@ -59,6 +59,9 @@ link_updates:
   - search_str: "/documentation/"
     action: substitute
     value: "/"
+  - search_str: "https://kafka.apache.org/cve-list#"
+    action: substitute
+    value: "/community/cve-list/#"
 sections:
   - name: getting-started
     title: Getting Started
