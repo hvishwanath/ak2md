@@ -115,10 +115,93 @@ class PostProcessStage(WorkflowStage):
                     self.logger.error(f"Failed to process documentation version: {version}")
                     success = False
             
+            # Process kraft.md files if they exist
+            if success:
+                self.logger.info("Processing kraft.md files for heading level adjustments")
+                success = self._process_kraft_files()
+            
             return success
                 
         except Exception as e:
             self.logger.error(f"Post-processing failed: {str(e)}")
+            return False
+    
+    def _process_kraft_files(self) -> bool:
+        """Process kraft.md files to adjust heading levels for migration section"""
+        try:
+            import re
+            import os
+            
+            # Find all kraft.md files in the output directory
+            kraft_files = list(self.context.output_dir.rglob("operations/kraft.md"))
+            
+            if not kraft_files:
+                self.logger.info("No kraft.md files found to process")
+                return True
+            
+            self.logger.info(f"Found {len(kraft_files)} kraft.md files to process")
+            
+            for kraft_file in kraft_files:
+                self.logger.info(f"Processing kraft.md file: {kraft_file}")
+                
+                # Read the file content
+                with open(kraft_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # Check if "ZooKeeper to KRaft Migration" section exists
+                if "ZooKeeper to KRaft Migration" not in content:
+                    self.logger.info(f"No 'ZooKeeper to KRaft Migration' section found in {kraft_file}")
+                    continue
+                
+                # Split content into lines for processing
+                lines = content.split('\n')
+                processed_lines = []
+                in_migration_section = False
+                
+                for line in lines:
+                    # Check if this line starts a heading
+                    heading_match = re.match(r'^(#{1,6})\s+(.+)$', line)
+                    
+                    if heading_match:
+                        level = len(heading_match.group(1))
+                        heading_text = heading_match.group(2)
+                        
+                        # Check if this is the "ZooKeeper to KRaft Migration" heading
+                        if "ZooKeeper to KRaft Migration" in heading_text:
+                            in_migration_section = True
+                            # Bump up the heading level (remove one #)
+                            new_level = max(1, level - 1)
+                            processed_lines.append('#' * new_level + ' ' + heading_text)
+                            continue
+                        
+                        # If we're in the migration section, bump up all subsection headings
+                        if in_migration_section:
+                            # Check if this is a subsection (higher level than the main migration heading)
+                            if level >= 3:  # Assuming the main migration heading is level 2 or 3
+                                new_level = max(1, level - 1)
+                                processed_lines.append('#' * new_level + ' ' + heading_text)
+                            else:
+                                # This is a new main section, exit migration section
+                                in_migration_section = False
+                                processed_lines.append(line)
+                            continue
+                    
+                    # If not a heading, just add the line as-is
+                    processed_lines.append(line)
+                
+                # Write the processed content back to the file
+                processed_content = '\n'.join(processed_lines)
+                with open(kraft_file, 'w', encoding='utf-8') as f:
+                    f.write(processed_content)
+                
+                self.logger.info(f"Successfully processed kraft.md file: {kraft_file}")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error processing kraft.md files: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             return False
 
 class ProcessSpecialFilesStage(WorkflowStage):
