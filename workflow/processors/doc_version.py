@@ -64,6 +64,11 @@ class ProcessDocVersion:
             src_path = os.path.join(self.input_path, self.version)
             success = True
             
+            # Get global preprocessing defaults
+            preprocessing = self.rules.get('preprocessing', {})
+            global_up_level = preprocessing.get('up_level', True)
+            global_remove_numeric = preprocessing.get('remove_numeric', True)
+            
             for weight, section in enumerate(self.rules.get('sections'), start=1):
                 context = dict()
                 context['output_path'] = version_output_path
@@ -71,8 +76,9 @@ class ProcessDocVersion:
                 context['src_dir'] = src_path
                 context['static_dir'] = os.path.join(self.output_path, 'static')
                 context['doc_dir'] = self.version
-                context['up_level'] = True
-                context['remove_numeric'] = True
+                # Use section-level override if provided, otherwise use global defaults
+                context['up_level'] = section.get('up_level', global_up_level)
+                context['remove_numeric'] = section.get('remove_numeric', global_remove_numeric)
                 context["section"] = section
                 context["section_weight"] = weight
                 context["link_updates"] = self.rules.get('link_updates')

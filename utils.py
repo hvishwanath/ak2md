@@ -66,6 +66,19 @@ class HandleBarsContextBuilder:
 #
 
 def process_markdown_headings(content, context):
+    """
+    Process markdown headings with optional transformations.
+    
+    Args:
+        content: Markdown content (string or list of strings)
+        context: Dictionary containing preprocessing options:
+            - up_level (bool): If True, bump heading levels up (reduce # count by 1)
+            - remove_numeric (bool): If True, remove numeric prefixes from headings
+              Removes patterns like: 1., 1:, 1.2., 1.2:, 1.2.3., 1.2.3:, etc.
+    
+    Returns:
+        Tuple of (processed_content, context)
+    """
     # if content is not string, convert it to string
     if not isinstance(content, str):
         markdown_content = '\n'.join(content)
@@ -75,6 +88,8 @@ def process_markdown_headings(content, context):
     up_level = context.get('up_level', False)
     remove_numeric = context.get('remove_numeric', False)
     
+    logging.debug(f'Processing markdown headings: up_level={up_level}, remove_numeric={remove_numeric}')
+    
     def bump_heading_level(match):
         level = len(match.group(1))
         new_level = max(1, level - 1)  # Ensure the level doesn't go below 1
@@ -82,14 +97,14 @@ def process_markdown_headings(content, context):
 
     def remove_numeric_heading(match):
         heading_text = match.group(2)
-        # Remove numeric headings of the form a., a.b, or a.b.c
-        heading_text = re.sub(r'^\d+(\.\d+)*\.*\s*', '', heading_text)
+        # Remove numeric headings of the form: 1., 1:, 1.2., 1.2:, 1.2.3., 1.2.3:, etc.
+        heading_text = re.sub(r'^\d+(\.\d+)*[.:]*\s*', '', heading_text)
         return '#' * len(match.group(1)) + ' ' + heading_text
 
     # Find all headings
     heading_pattern = re.compile(r'^(#{1,6})\s*(.*)', re.MULTILINE)
     processed_content = markdown_content
-
+    
     if up_level:
         lines = markdown_content.split('\n')
         processed_lines = []
@@ -277,6 +292,135 @@ def process_ssi_tags_with_hugo(html_content, context):
         shortcode = f'{{{{< include-html file="{md_file}" >}}}}'
         html_content = html_content.replace(f'<!--#include virtual="{match}" -->', shortcode)
         logging.debug(f'Replaced SSI with Hugo shortcode: {shortcode}')
+    return html_content, context
+
+def convert_youtube_embeds_to_shortcode(html_content, context):
+    """
+    Convert YouTube video embeds (with onclick loadVideo) to Hugo youtube shortcodes.
+    
+    Handles two patterns:
+    1. Simple onclick="loadVideo()" with separate JavaScript function
+    2. onclick="loadVideo('id', 'VIDEO_ID?params', 'class')" inline
+    3. Video series with titles in a separate navigation block
+    """
+    logging.info('Converting YouTube embeds to Hugo shortcodes')
+    
+    # Pattern 1: Extract video IDs from JavaScript loadVideo functions
+    # Matches: iframe.src="https://www.youtube.com/embed/VIDEO_ID?params"
+    js_pattern = re.compile(r'iframe\.src\s*=\s*["\']https://www\.youtube\.com/embed/([a-zA-Z0-9_-]+)(\?[^"\']*)?["\']', re.IGNORECASE)
+    js_matches = js_pattern.findall(html_content)
+    
+    # Pattern 2: Extract video IDs from onclick attributes with parameters
+    # Matches: onclick="loadVideo('placeholder-id', 'VIDEO_ID?params', 'class')"
+    onclick_pattern = re.compile(r'onclick\s*=\s*["\']loadVideo\([^,]*,\s*[\'"]([a-zA-Z0-9_-]+)(\?[^\'"]*)?\s*[\'"]', re.IGNORECASE)
+    onclick_matches = onclick_pattern.findall(html_content)
+    
+    # Collect all video IDs and their class associations
+    video_ids = []
+    video_classes = {}  # Map class (video_1, video_2) to video ID
+    
+    for match in js_matches:
+        video_ids.append(match[0])
+    
+    # Extract video IDs with their associated classes
+    # Pattern: onclick="loadVideo('placeholder', 'VIDEO_ID?params', 'class')"
+    onclick_class_pattern = re.compile(
+        r'onclick\s*=\s*["\']loadVideo\([^,]*,\s*[\'"]([a-zA-Z0-9_-]+)(\?[^\'"]*)?[\'"],?\s*[\'"]([^\'"]*)[\'"]\)',
+        re.IGNORECASE
+    )
+    for match in onclick_class_pattern.finditer(html_content):
+        video_id = match.group(1)
+        class_name = match.group(3)  # Changed from group(2) to group(3) because we added query param group
+        video_ids.append(video_id)
+        video_classes[class_name] = video_id
+        logging.debug(f'Found video ID {video_id} with class {class_name}')
+    
+    logging.info(f'Found {len(video_ids)} YouTube video(s): {video_ids}')
+    
+    if not video_ids:
+        return html_content, context
+    
+    # Pattern 3: Extract video titles from navigation list (if exists)
+    # Matches: <p class="video__item video_list_1">...<span class="video__text">Title</span>...
+    video_titles = {}  # Map video number to title
+    title_pattern = re.compile(
+        r'<p[^>]*class="[^"]*video__item[^"]*video_list_(\d+)[^"]*"[^>]*>.*?'
+        r'<span[^>]*class="video__text"[^>]*>([^<]+)</span>',
+        re.IGNORECASE | re.DOTALL
+    )
+    
+    for match in title_pattern.finditer(html_content):
+        video_num = match.group(1)
+        title = match.group(2).strip()
+        video_titles[video_num] = title
+        logging.debug(f'Found video title #{video_num}: {title}')
+    
+    # Check if we have a video series with titles
+    has_video_series = len(video_titles) > 0 and len(video_titles) == len(video_ids)
+    
+    if has_video_series:
+        logging.info('Detected video series with navigation - creating structured output')
+        
+        # Find and replace the entire video grid section
+        # Pattern matches from the start of video grid to the end of video list
+        grid_pattern = re.compile(
+            r'<div[^>]*class="[^"]*video__series__grid[^"]*"[^>]*>.*?</div>\s*</div>\s*</div>',
+            re.IGNORECASE | re.DOTALL
+        )
+        
+        # Build the replacement with titles and videos
+        replacement_parts = []
+        for i, (video_num, title) in enumerate(sorted(video_titles.items()), 1):
+            class_key = f'video_{video_num}'
+            video_id = video_classes.get(class_key, video_ids[i-1] if i-1 < len(video_ids) else None)
+            
+            if video_id:
+                # Use ":" instead of "." to avoid html2text escaping it as a list marker
+                replacement_parts.append(f'\n<h3>{i}: {title}</h3>\n')
+                replacement_parts.append(f'<div class="youtube-video">\n{{{{< youtube "{video_id}" >}}}}\n</div>\n')
+        
+        replacement = '\n'.join(replacement_parts)
+        html_content = grid_pattern.sub(replacement, html_content)
+        logging.info(f'Replaced video series grid with {len(video_titles)} titled videos')
+        
+    else:
+        # Original behavior: Replace individual img tags
+        for video_id in video_ids:
+            # First, try to find img with onclick containing this video_id
+            img_onclick_pattern = re.compile(
+                r'<img[^>]*onclick\s*=\s*["\']loadVideo\([^)]*' + re.escape(video_id) + r'[^)]*\)["\'][^>]*>\s*'
+                r'(?:<span[^>]*>\([^)]*YouTube[^)]*\)</span>\s*)?',
+                re.IGNORECASE | re.DOTALL
+            )
+            
+            if img_onclick_pattern.search(html_content):
+                replacement = f'\n\n<div class="youtube-video">\n{{{{< youtube "{video_id}" >}}}}\n</div>\n\n'
+                html_content = img_onclick_pattern.sub(replacement, html_content, count=1)
+                logging.debug(f'Replaced YouTube embed with video ID: {video_id}')
+                continue
+        
+        # Handle simple onclick="loadVideo()" without parameters
+        simple_onclick_pattern = re.compile(
+            r'<img[^>]*id\s*=\s*["\']([^"\']+)["\'][^>]*onclick\s*=\s*["\']loadVideo\(\)["\'][^>]*>\s*'
+            r'(?:<span[^>]*>\([^)]*YouTube[^)]*\)</span>\s*)?',
+            re.IGNORECASE | re.DOTALL
+        )
+        
+        simple_matches = simple_onclick_pattern.finditer(html_content)
+        for i, match in enumerate(simple_matches):
+            if i < len(video_ids):
+                video_id = video_ids[i]
+                replacement = f'\n\n<div class="youtube-video">\n{{{{< youtube "{video_id}" >}}}}\n</div>\n\n'
+                html_content = html_content.replace(match.group(0), replacement, 1)
+                logging.debug(f'Replaced simple YouTube embed with video ID: {video_id}')
+    
+    # Clean up any remaining notification spans about YouTube
+    notification_pattern = re.compile(
+        r'<span[^>]*id\s*=\s*["\']notification["\'][^>]*>.*?YouTube.*?</span>',
+        re.IGNORECASE | re.DOTALL
+    )
+    html_content = notification_pattern.sub('', html_content)
+    
     return html_content, context
 
 def convert_html_to_md(html_content, context):

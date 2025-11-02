@@ -110,6 +110,55 @@ Based on the rules defined in `process.yaml`:
 - Go through `links` in the markdown files in the pre-process phase and modify them as specified in `link_updates` section. Add `prefix`, `replace` or `subtitute` part of the link.
 - Move `generated` and `javadoc` files into `static` folder so that we don't have to convert them into markdown, but instead use the `include-html` shortcode to pull in the content from HTML. 
 
+## Syncing to Hugo Site
+
+After processing the HTML to markdown, you need to sync the output to your Hugo site. The project includes a dedicated sync script with different strategies for different content types.
+
+### Quick Start
+
+```bash
+# Dry run to see what will be synced
+python sync_to_hugo.py --dry-run
+
+# Sync to the Hugo site
+python sync_to_hugo.py
+
+# Or use the all-in-one script
+./build_and_sync.sh
+```
+
+### Sync Strategies
+
+The sync script uses two strategies:
+
+- **REPLACE** - Deletes destination directory and copies entire source directory (used for doc versions and static content)
+- **MERGE** - Only copies files from source, preserving existing files in destination (used for blog, community, and data)
+
+### Sync Rules
+
+| Source | Strategy | Description |
+|--------|----------|-------------|
+| `content/en/{doc_version}` | REPLACE | All doc version directories (07, 08, 10-41, 0100-0110, etc.) |
+| `content/en/blog` | MERGE | Blog posts |
+| `content/en/community` | MERGE | Community content |
+| `data` | MERGE | Data files (JSON, YAML) |
+| `static` | REPLACE | Static assets (images, CSS, JS) |
+
+### Options
+
+```bash
+# Sync to custom destination
+python sync_to_hugo.py --dest /path/to/hugo/site
+
+# Use custom config file
+python sync_to_hugo.py --config /path/to/process.yaml
+
+# Use custom source directory
+python sync_to_hugo.py --source /path/to/workspace/output
+```
+
+For more details, see [README_SYNC.md](README_SYNC.md).
+
 ## Installation
 
 ```bash
@@ -122,5 +171,24 @@ pip install -r requirements.txt
 
 # Run the workflow
 python main.py
+
+# Sync to Hugo site
+python sync_to_hugo.py --dry-run  # Test first
+python sync_to_hugo.py            # Actually sync
+```
+
+## Complete Pipeline
+
+For a complete end-to-end build and sync:
+
+```bash
+# All-in-one: process and sync
+./build_and_sync.sh
+
+# With custom destination
+./build_and_sync.sh /path/to/hugo/site
+
+# Dry run mode
+./build_and_sync.sh /path/to/hugo/site true
 ```
 

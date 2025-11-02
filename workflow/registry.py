@@ -8,6 +8,7 @@ from utils import (
     sanitize_input_html,
     process_handlebars_templates,
     process_ssi_tags_with_hugo,
+    convert_youtube_embeds_to_shortcode,
     convert_html_to_md,
     add_front_matter,
     process_markdown_headings,
@@ -35,6 +36,7 @@ class WorkflowStepRegistry:
         self.register_pre_process_step("sanitize_html", sanitize_input_html)
         self.register_pre_process_step("process_handlebars", process_handlebars_templates)
         self.register_pre_process_step("process_ssi", process_ssi_tags_with_hugo)
+        self.register_pre_process_step("convert_youtube_embeds", convert_youtube_embeds_to_shortcode)
         self.register_pre_process_step("convert_to_md", convert_html_to_md)
         self.register_pre_process_step("add_front_matter", add_front_matter)
         self.register_pre_process_step("process_headings", process_markdown_headings)
@@ -62,6 +64,7 @@ class WorkflowStepRegistry:
                 "sanitize_html",
                 "process_handlebars",
                 "process_ssi",
+                "convert_youtube_embeds",
                 "convert_to_md",
                 "add_front_matter",
                 "process_headings"

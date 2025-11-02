@@ -3,6 +3,11 @@ auto_weight: true
 exclude_dirs: ['markdown', '.git', 'node_modules', '.history']
 static_dirs: ['generated', 'javadoc', 'images', 'diagrams', 'logos']
 sanitize_list: ["ops.html", "index.html", "upgrade-guide.html", "tutorial.html", "connect.html", "quickstart.html"]
+# Global preprocessing defaults for markdown headings
+# These can be overridden at the section or file level
+preprocessing:
+  up_level: true        # Bump heading levels up (reduce # count by 1)
+  remove_numeric: true  # Remove numeric prefixes (e.g., "1.", "1:", "1.2.", "1.2:", etc.)
 doc_dirs:
   - "32"
   - "35"
@@ -64,6 +69,10 @@ link_updates:
     action: substitute
     value: "/community/cve-list/#"
 sections:
+  # Example: Section-level preprocessing control
+  # You can override global preprocessing defaults at the section level by adding:
+  #   up_level: false        # Override global up_level setting for this section
+  #   remove_numeric: false  # Override global remove_numeric setting for this section
   - name: getting-started
     title: Getting Started
     description: "This section provides an overview of what Kafka is, why it is useful, and how to get started using it."
@@ -88,10 +97,14 @@ sections:
       - name: upgrading
         title: Upgrading
         src_file: upgrade.md
+      # Example: File-level preprocessing control
+      # Individual files can override section and global preprocessing settings
       - name: kraft-vs-zk
         title: KRaft vs ZooKeeper
         src_file: documentation/zk2kraft.md
         dst_file: zk2kraft.md
+        up_level: False        # Don't uplevel headings for this specific file
+        # remove_numeric: False  # You can also control remove_numeric per file
       - name: compatibility
         title: Compatibility
         src_file: documentation/compatibility.md

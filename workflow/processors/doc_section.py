@@ -82,7 +82,17 @@ class ProcessDocSection:
             if not os.path.exists(src_file):
                 logger.info(f'File not found: {src_file}, continuing processing...')
                 continue
-                
+            
+            # File-level overrides for preprocessing options
+            # These override both global and section-level settings
+            # Hierarchy: global defaults → section overrides → file overrides
+            if "up_level" in n:
+                self.context["up_level"] = n["up_level"]
+                logger.debug(f'File-level override: up_level={n["up_level"]} for {src_file}')
+            if "remove_numeric" in n:
+                self.context["remove_numeric"] = n["remove_numeric"]
+                logger.debug(f'File-level override: remove_numeric={n["remove_numeric"]} for {src_file}')
+            
             if "dst_file" in n:
                 dest_file = os.path.join(self.context["section_dir"], n['dst_file'])
             else:
