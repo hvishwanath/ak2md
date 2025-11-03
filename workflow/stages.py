@@ -11,7 +11,8 @@ from workflow.processors import (
     PreProcessDirectory, 
     ProcessDocVersion,
     ProcessSpecialFiles,
-    special_file_processors
+    special_file_processors,
+    TocCleaner
 )
 from utils import HandleBarsContextBuilder
 
@@ -113,6 +114,14 @@ class PostProcessStage(WorkflowStage):
                 
                 if not processor.execute():
                     self.logger.error(f"Failed to process documentation version: {version}")
+                    success = False
+            
+            # Clean TOC from all markdown files
+            if success:
+                self.logger.info("Cleaning manually created TOC sections from markdown files")
+                toc_cleaner = TocCleaner(self.context.output_dir)
+                if not toc_cleaner.execute():
+                    self.logger.error("Failed to clean TOC sections")
                     success = False
             
             # Process kraft.md files if they exist

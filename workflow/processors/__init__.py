@@ -12,6 +12,7 @@ from workflow.processors.special_files import (
     register_special_file_processor,
     process_committers
 )
+from workflow.processors.toc_cleaner import TocCleaner, clean_toc_from_markdown
 
 __all__ = [
     'PreProcessFile',
@@ -21,5 +22,7 @@ __all__ = [
     'ProcessSpecialFiles',
     'special_file_processors',
     'register_special_file_processor',
-    'process_committers'
+    'process_committers',
+    'TocCleaner',
+    'clean_toc_from_markdown'
 ] 
