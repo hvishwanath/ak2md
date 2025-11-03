@@ -14,7 +14,8 @@ from utils import (
     process_markdown_headings,
     update_front_matter,
     process_markdown_links,
-    split_markdown_by_heading
+    split_markdown_by_heading,
+    remove_duplicate_title_heading
 )
 
 logger = logging.getLogger('ak2md-workflow.registry')
@@ -44,6 +45,7 @@ class WorkflowStepRegistry:
         # Register post-process steps
         self.register_post_process_step("update_front_matter", update_front_matter)
         self.register_post_process_step("process_links", process_markdown_links)
+        self.register_post_process_step("remove_duplicate_h1", remove_duplicate_title_heading)
         self.register_post_process_step("split_by_heading", split_markdown_by_heading)
     
     def register_pre_process_step(self, name: str, step_func: StepFunction):

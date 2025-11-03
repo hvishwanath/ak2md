@@ -119,9 +119,12 @@ sections:
     strategy: arrange
     strategy_params: []
     files:
+      # Single-file section: Use dst_file: _index.md to write content directly to section index
+      # This preserves the section weight for proper ordering in Hugo
       - name: api
         title: API
         src_file: api.md
+        dst_file: _index.md  # Writes to section index, preserves section weight
         processors: []
 
   - name: configuration
@@ -131,9 +134,11 @@ sections:
     strategy: arrange
     strategy_params: []
     files:
+      # Single-file section: writing to _index.md preserves section weight
       - name: configuration
         title: Configuration
         src_file: configuration.md
+        dst_file: _index.md  # Writes to section index, preserves section weight
         processors: []
 
   - name: design
@@ -147,6 +152,7 @@ sections:
         title: Design
         src_file: design.md
         processors: []
+        up_level: false
       - name: protocol
         title: Protocol
         src_file: protocol.md
@@ -222,6 +228,7 @@ sections:
 
   - name: streams/developer-guide
     title: Streams Developer Guide
+    up_level: False
     tags:
       - streams
       - developer-guide

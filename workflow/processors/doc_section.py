@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any
 
 from workflow.registry import WorkflowStepRegistry
-from utils import execute_step, write_file, update_front_matter, process_markdown_headings, process_markdown_links, split_markdown_by_heading
+from utils import execute_step, write_file, update_front_matter, process_markdown_headings, process_markdown_links, split_markdown_by_heading, remove_duplicate_title_heading
 
 logger = logging.getLogger('ak2md-workflow.steps.processor-doc-section')
 
@@ -64,18 +64,39 @@ class ProcessDocSection:
             update_front_matter,
             process_markdown_headings,
             process_markdown_links,
+            remove_duplicate_title_heading,  # Remove duplicate H1 if it matches title
         ]
         
         for w, n in enumerate(self.section["files"], start=1):
+            # Determine destination file path first
+            if "dst_file" in n:
+                dest_file = os.path.join(self.context["section_dir"], n['dst_file'])
+            else:
+                dest_file = os.path.join(self.context["section_dir"], n['src_file'])
+            
+            # Check if we're writing to _index.md (section index)
+            is_section_index = os.path.basename(dest_file) == '_index.md'
+            
+            # If writing to _index.md, preserve section weight; otherwise use file weight
+            weight = self.context["section_weight"] if is_section_index else w
+            
+            # If writing to _index.md and no description provided, use section description
+            description = n.get("description", "")
+            if is_section_index and not description:
+                description = self.section.get("description", "")
+            
             template_values = {
                 "title": n["title"],
-                "description": n.get("description", ""),
+                "description": description,
                 "tags": self.context["front_matter"]["tags"] + n.get("tags", []),
                 "aliases": "",
-                "weight": w,
+                "weight": weight,
                 "type": self.section.get("type", "docs"),
                 "keywords": n.get("keywords", "")
             }
+            
+            if is_section_index:
+                logger.info(f'File will be written to section index (_index.md), using section weight: {weight}')
             
             self.context["template_values"] = template_values
             src_file = os.path.join(self.context['src_dir'], n['src_file'])
@@ -92,11 +113,6 @@ class ProcessDocSection:
             if "remove_numeric" in n:
                 self.context["remove_numeric"] = n["remove_numeric"]
                 logger.debug(f'File-level override: remove_numeric={n["remove_numeric"]} for {src_file}')
-            
-            if "dst_file" in n:
-                dest_file = os.path.join(self.context["section_dir"], n['dst_file'])
-            else:
-                dest_file = os.path.join(self.context["section_dir"], n['src_file'])
                 
             logger.info(f'Processing file: {src_file}, Destination file: {dest_file}')
             try:

@@ -210,6 +210,52 @@ def split_markdown_by_heading(content, context):
     
     return "", context
 
+def remove_duplicate_title_heading(content, context):
+    """
+    Remove the first H1 heading if it exactly matches the title in front matter.
+    
+    This prevents duplicate headings when the Hugo title and first markdown H1 are the same.
+    
+    Args:
+        content: Markdown content (string)
+        context: Dictionary containing template_values with title
+    
+    Returns:
+        Tuple of (processed_content, context)
+    """
+    if not isinstance(content, str):
+        return content, context
+    
+    # Get the title from template values
+    template_values = context.get('template_values', {})
+    title = template_values.get('title', '').strip()
+    
+    if not title:
+        return content, context
+    
+    # Find the first H1 heading
+    lines = content.split('\n')
+    first_h1_index = None
+    first_h1_text = None
+    
+    for i, line in enumerate(lines):
+        if line.startswith('# ') and not line.startswith('## '):
+            first_h1_text = line[2:].strip()  # Remove '# ' prefix
+            first_h1_index = i
+            break
+    
+    # If we found an H1 and it matches the title, remove it
+    if first_h1_index is not None and first_h1_text == title:
+        logging.info(f'Removing duplicate H1 heading: "{title}"')
+        # Remove the H1 line and any immediately following empty lines
+        del lines[first_h1_index]
+        # Remove following empty lines (but keep first non-empty)
+        while first_h1_index < len(lines) and lines[first_h1_index].strip() == '':
+            del lines[first_h1_index]
+        content = '\n'.join(lines)
+    
+    return content, context
+
 def process_markdown_links(content, context):
     link_updates = context.get('link_updates', [])
     # logging.info(f'Processing markdown links: {link_updates}')
