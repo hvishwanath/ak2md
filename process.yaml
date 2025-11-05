@@ -131,15 +131,10 @@ sections:
     title: Configuration
     tags:
       - configuration
-    strategy: arrange
-    strategy_params: []
-    files:
-      # Single-file section: writing to _index.md preserves section weight
-      - name: configuration
-        title: Configuration
-        src_file: configuration.md
-        dst_file: _index.md  # Writes to section index, preserves section weight
-        processors: []
+    strategy: split_markdown_by_heading
+    # split by heading level 2
+    strategy_params: [2]
+    src_file: configuration.md
 
   - name: design
     title: Design
@@ -152,7 +147,7 @@ sections:
         title: Design
         src_file: design.md
         processors: []
-        up_level: false
+        up_level: False
       - name: protocol
         title: Protocol
         src_file: protocol.md
@@ -196,6 +191,7 @@ sections:
 
   - name: streams
     title: Kafka Streams
+    up_level: False
     tags:
       - streams
     strategy: arrange

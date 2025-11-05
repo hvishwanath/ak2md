@@ -228,6 +228,22 @@ def process_powered_by(content: str, output_path: str) -> bool:
             # Parse the JSON array
             data = json.loads(json_array_str)
             
+            # Sanitize HTML in descriptions to fix malformed attributes
+            fixed_count = 0
+            for item in data:
+                if 'description' in item and item['description']:
+                    original = item['description']
+                    # Fix: <a href='...' , target='_blank'> → <a href='...' target='_blank'>
+                    # Remove comma before target, _blank, or other common attributes
+                    sanitized = re.sub(r'([\'"])\s*,\s*(target|rel|class|id|style)\s*=', r'\1 \2=', original)
+                    if sanitized != original:
+                        item['description'] = sanitized
+                        fixed_count += 1
+                        logger.debug(f"Fixed malformed HTML attribute in: {item.get('link', 'unknown')}")
+            
+            if fixed_count > 0:
+                logger.info(f"Sanitized {fixed_count} testimonial descriptions with malformed HTML attributes")
+            
             # Write to JSON file with proper formatting
             output_file = os.path.join(data_dir, "testimonials.json")
             with open(output_file, 'w', encoding='utf-8') as f:

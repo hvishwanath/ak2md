@@ -165,6 +165,40 @@ def update_front_matter(content, context):
     
     return f"{front_matter}\n{content}", context
 
+def sanitize_filename(text):
+    """
+    Sanitize text to create a valid filename.
+    Removes or replaces characters that are problematic for filenames.
+    """
+    # Remove or replace special characters
+    text = text.strip()
+    # Remove colons, question marks, quotes, asterisks, pipe, less/greater than
+    text = re.sub(r'[:\?\*\|<>\"\']+', '', text)
+    # Replace slashes and backslashes with hyphens
+    text = re.sub(r'[/\\]+', '-', text)
+    # Replace multiple spaces or special chars with single hyphen
+    text = re.sub(r'[\s\._,;]+', '-', text)
+    # Remove leading/trailing hyphens
+    text = text.strip('-')
+    # Convert to lowercase
+    text = text.lower()
+    # Limit length to avoid filesystem issues
+    if len(text) > 200:
+        text = text[:200].rsplit('-', 1)[0]  # Cut at word boundary
+    return text
+
+def sanitize_yaml_title(text):
+    """
+    Sanitize text to be safe in YAML front matter.
+    Removes trailing colons and other problematic characters.
+    """
+    text = text.strip()
+    # Remove trailing punctuation (colons, commas, semicolons) in any combination
+    text = re.sub(r'[:;,\s]+$', '', text)
+    # Strip again after removing trailing chars
+    text = text.strip()
+    return text
+
 def split_markdown_by_heading(content, context):
     heading_level = context["section"]["strategy_params"][0]
     heading_pattern = re.compile(rf'^({"#" * heading_level} )(.+)$') 
@@ -174,14 +208,17 @@ def split_markdown_by_heading(content, context):
     counter = 1
     
     def write_to_file(title, content):
-        fn = title.strip().lower().replace(' ', '-')
+        # Sanitize title for YAML front matter
+        sanitized_title = sanitize_yaml_title(title)
+        # Sanitize for filename
+        fn = sanitize_filename(title)
         output_file_name = os.path.join(context["section_dir"], f"{fn}.md")
         out, _= process_markdown_headings(content, context)
         out, _= process_markdown_links(out, context)
 
         template_values = {
-            "title": title,
-            "description": title,
+            "title": sanitized_title,
+            "description": sanitized_title,
             "tags": context["front_matter"]["tags"], 
             "aliases": "",
             "weight": counter,
@@ -190,6 +227,8 @@ def split_markdown_by_heading(content, context):
         }
         context["template_values"] = template_values
         out, _ = update_front_matter(out, context)
+        # Remove duplicate H1 if it matches the title
+        out, _ = remove_duplicate_title_heading(out, context)
         with open(output_file_name, 'w') as file:
             file.writelines(out)
 
@@ -212,9 +251,10 @@ def split_markdown_by_heading(content, context):
 
 def remove_duplicate_title_heading(content, context):
     """
-    Remove the first H1 heading if it exactly matches the title in front matter.
+    Remove the first H1 or H2 heading if it exactly matches the title in front matter.
     
-    This prevents duplicate headings when the Hugo title and first markdown H1 are the same.
+    This prevents duplicate headings when the Hugo title and first markdown heading are the same.
+    Checks both H1 and H2 levels since content may have been upleveled or split.
     
     Args:
         content: Markdown content (string)
@@ -233,25 +273,34 @@ def remove_duplicate_title_heading(content, context):
     if not title:
         return content, context
     
-    # Find the first H1 heading
+    # Find the first H1 or H2 heading
     lines = content.split('\n')
-    first_h1_index = None
-    first_h1_text = None
+    first_heading_index = None
+    first_heading_text = None
+    heading_level = None
     
     for i, line in enumerate(lines):
+        # Check for H1 (single #)
         if line.startswith('# ') and not line.startswith('## '):
-            first_h1_text = line[2:].strip()  # Remove '# ' prefix
-            first_h1_index = i
+            first_heading_text = line[2:].strip()  # Remove '# ' prefix
+            first_heading_index = i
+            heading_level = 1
+            break
+        # Check for H2 (double ##)
+        elif line.startswith('## ') and not line.startswith('### '):
+            first_heading_text = line[3:].strip()  # Remove '## ' prefix
+            first_heading_index = i
+            heading_level = 2
             break
     
-    # If we found an H1 and it matches the title, remove it
-    if first_h1_index is not None and first_h1_text == title:
-        logging.info(f'Removing duplicate H1 heading: "{title}"')
-        # Remove the H1 line and any immediately following empty lines
-        del lines[first_h1_index]
+    # If we found a heading and it matches the title, remove it
+    if first_heading_index is not None and first_heading_text == title:
+        logging.info(f'Removing duplicate H{heading_level} heading: "{title}"')
+        # Remove the heading line and any immediately following empty lines
+        del lines[first_heading_index]
         # Remove following empty lines (but keep first non-empty)
-        while first_h1_index < len(lines) and lines[first_h1_index].strip() == '':
-            del lines[first_h1_index]
+        while first_heading_index < len(lines) and lines[first_heading_index].strip() == '':
+            del lines[first_heading_index]
         content = '\n'.join(lines)
     
     return content, context
