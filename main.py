@@ -11,7 +11,8 @@ from workflow import (
     PreProcessStage, 
     PostProcessStage, 
     ValidationStage,
-    ProcessSpecialFilesStage
+    ProcessSpecialFilesStage,
+    StreamsEnhancementStage
 )
 
 # Configure logging
@@ -61,6 +62,7 @@ class Workflow:
             PreProcessStage("pre-process", self.context),
             PostProcessStage("post-process", self.context),
             ProcessSpecialFilesStage("special-files", self.context, special_files),
+            StreamsEnhancementStage("streams-enhancements", self.context),
             ValidationStage("validate", self.context)
         ]
     
@@ -87,7 +89,7 @@ def main():
     parser.add_argument('--workspace', default='./workspace',
                        help='Workspace directory for the conversion')
     parser.add_argument('--start-stage', 
-                       choices=['clone', 'pre-process', 'post-process', 'special-files', 'validate'],
+                       choices=['clone', 'pre-process', 'post-process', 'special-files', 'streams-enhancements', 'validate'],
                        help='Start from a specific stage')
     parser.add_argument('--debug', action='store_true',
                        help='Enable debug logging')

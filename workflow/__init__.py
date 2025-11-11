@@ -10,7 +10,8 @@ from workflow.stages import (
     PreProcessStage,
     PostProcessStage,
     ValidationStage,
-    ProcessSpecialFilesStage
+    ProcessSpecialFilesStage,
+    StreamsEnhancementStage
 )
 from workflow.processors import (
     PreProcessDirectory,
@@ -28,6 +29,7 @@ __all__ = [
     'PostProcessStage',
     'ValidationStage',
     'ProcessSpecialFilesStage',
+    'StreamsEnhancementStage',
     'PreProcessDirectory',
     'ProcessDocVersion',
     'ProcessDocSection',

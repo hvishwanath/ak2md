@@ -299,3 +299,14 @@ special_files:
     processor: cve-list
     input_dir: interim
   # Add more special files as needed
+
+# Streams enhancements configuration
+# This stage processes streams/introduction.md files to add:
+# - Interactive carousel for YouTube videos
+# - Cards for Kafka Streams use cases from testimonials
+# - Tabbed code panes for Java/Scala examples
+# - Removal of redundant links
+streams_enhancements:
+  enabled: true
+  # Use ['*'] to process all versions, or specify versions like ['41', '40', '39']
+  versions: ['*']

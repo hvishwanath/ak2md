@@ -14,6 +14,12 @@ from workflow.processors import (
     special_file_processors,
     TocCleaner
 )
+from workflow.processors.special_files import (
+    _transform_youtube_to_carousel,
+    _transform_use_cases_to_cards,
+    _transform_code_to_tabs,
+    _remove_redundant_links
+)
 from utils import HandleBarsContextBuilder
 
 logger = logging.getLogger('ak2md-workflow.stages')
@@ -264,6 +270,79 @@ class ProcessSpecialFilesStage(WorkflowStage):
             return success
         except Exception as e:
             self.logger.error(f"Error in special files processing stage: {str(e)}")
+            return False
+
+class StreamsEnhancementStage(WorkflowStage):
+    """Enhances Kafka Streams documentation with carousel, cards, and tabbed code"""
+    
+    def _do_execute(self) -> bool:
+        try:
+            streams_config = self.context.rules.get('streams_enhancements', {})
+            
+            # Check if streams enhancements are enabled
+            if not streams_config.get('enabled', True):
+                self.logger.info("Streams enhancements are disabled, skipping")
+                return True
+            
+            # Get list of versions to process
+            target_versions = streams_config.get('versions', ['*'])
+            if '*' in target_versions:
+                # Process all versions
+                target_versions = self.context.rules.get('doc_dirs', [])
+            
+            self.logger.info(f"Processing streams enhancements for versions: {target_versions}")
+            
+            success = True
+            for version in target_versions:
+                # Read from the post-processed introduction.md (has proper front matter)
+                streams_intro_file = self.context.output_dir / "content" / "en" / version / "streams" / "introduction.md"
+                
+                if not streams_intro_file.exists():
+                    self.logger.debug(f"No streams/introduction.md found for version {version}, skipping")
+                    continue
+                
+                self.logger.info(f"Processing streams/introduction.md for version {version}")
+                
+                # Read the post-processed file (has proper front matter already)
+                with open(streams_intro_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # Load testimonials data
+                testimonials_file = self.context.output_dir / "data" / "testimonials.json"
+                testimonials_data = []
+                if testimonials_file.exists():
+                    import json
+                    with open(testimonials_file, 'r', encoding='utf-8') as f:
+                        testimonials_data = json.load(f)
+                    self.logger.debug(f"Loaded {len(testimonials_data)} testimonials")
+                else:
+                    self.logger.warning(f"Testimonials file not found at {testimonials_file}")
+                
+                # Apply transformations in order
+                try:
+                    content = _transform_youtube_to_carousel(content)
+                    content = _transform_use_cases_to_cards(content, testimonials_data)
+                    content = _transform_code_to_tabs(content)
+                    content = _remove_redundant_links(content)
+                except Exception as e:
+                    self.logger.error(f"Failed to process streams introduction for version {version}: {e}")
+                    import traceback
+                    self.logger.error(traceback.format_exc())
+                    success = False
+                    continue
+                
+                # Write back the processed content
+                with open(streams_intro_file, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                
+                self.logger.info(f"Successfully enhanced streams/introduction.md for version {version}")
+            
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"Streams enhancement stage failed: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             return False
 
 class ValidationStage(WorkflowStage):

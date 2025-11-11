@@ -471,8 +471,449 @@ def process_cve_list(content: str, output_path: str) -> bool:
         logger.error(traceback.format_exc())
         return False
 
+# Processor for streams/introduction.md
+def process_streams_introduction(content: str, output_path: str) -> bool:
+    """Process streams/introduction.md to enhance with carousel, cards, and tabbed code
+    
+    This function:
+    1. Converts YouTube video shortcodes to a carousel presentation
+    2. Extracts Kafka Streams use cases and renders them as cards
+    3. Converts Java/Scala code blocks to tabbed panes
+    4. Removes redundant links
+    """
+    try:
+        import re
+        import json
+        from pathlib import Path
+        
+        logger.info("Processing streams/introduction.md for enhancements")
+        
+        # Load testimonials data
+        testimonials_file = Path(output_path) / "data" / "testimonials.json"
+        testimonials_data = []
+        if testimonials_file.exists():
+            with open(testimonials_file, 'r', encoding='utf-8') as f:
+                testimonials_data = json.load(f)
+            logger.info(f"Loaded {len(testimonials_data)} testimonials from data file")
+        else:
+            logger.warning(f"Testimonials file not found at {testimonials_file}")
+        
+        # Step 1: Transform YouTube videos to carousel
+        content = _transform_youtube_to_carousel(content)
+        
+        # Step 2: Transform Kafka Streams use cases to cards
+        content = _transform_use_cases_to_cards(content, testimonials_data)
+        
+        # Step 3: Transform Java/Scala code to tabbed panes
+        content = _transform_code_to_tabs(content)
+        
+        # Step 4: Remove redundant links
+        content = _remove_redundant_links(content)
+        
+        # Write back the modified content
+        # The file path is passed as file_name in the ProcessSpecialFiles call
+        # We need to extract the actual file path from the input
+        return content
+        
+    except Exception as e:
+        logger.error(f"Error processing streams introduction: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
+def _transform_youtube_to_carousel(content: str) -> str:
+    """Transform YouTube shortcodes into a carousel presentation with titles
+    
+    Uses custom carousel/carousel-item shortcodes for a slideshow experience.
+    """
+    import re
+    
+    logger.info("Transforming YouTube videos to carousel")
+    
+    # Pattern to match sections with YouTube videos and their headings
+    # Looking for: ## Heading\n\n{{< youtube "ID" >}}
+    video_pattern = re.compile(
+        r'##\s+([^\n]+)\n\s*\n\s*\{\{<\s*youtube\s+"([^"]+)"\s*>\}\}',
+        re.MULTILINE
+    )
+    
+    videos = []
+    for match in video_pattern.finditer(content):
+        title = match.group(1).strip()
+        video_id = match.group(2).strip()
+        videos.append({
+            'title': title,
+            'video_id': video_id,
+            'full_match': match.group(0)
+        })
+    
+    if not videos:
+        logger.warning("No YouTube videos found in expected format")
+        return content
+    
+    logger.info(f"Found {len(videos)} YouTube videos to convert")
+    
+    # Find the position to insert the carousel (after the intro paragraph)
+    # Look for the "## Intro to Streams" or first video section
+    first_video_section = videos[0]['full_match'] if videos else None
+    
+    if first_video_section:
+        # Build carousel HTML
+        carousel_html = _build_video_carousel(videos)
+        
+        # Replace all video sections with the carousel
+        # First, remove all individual video sections
+        for video in videos:
+            content = content.replace(video['full_match'], '', 1)
+        
+        # Insert carousel before the "* * *" separator or after intro text
+        separator_pattern = r'\n\*\s+\*\s+\*\s*\n'
+        separator_match = re.search(separator_pattern, content)
+        
+        if separator_match:
+            # Insert before the separator
+            insert_pos = separator_match.start()
+            content = content[:insert_pos] + '\n\n' + carousel_html + '\n\n' + content[insert_pos:]
+        else:
+            # Insert after the intro paragraph (after first heading)
+            intro_end = content.find('\n\n', content.find('# Kafka Streams'))
+            if intro_end > 0:
+                content = content[:intro_end] + '\n\n' + carousel_html + '\n\n' + content[intro_end:]
+    
+    return content
+
+def _build_video_carousel(videos: list) -> str:
+    """Build HTML for video carousel using custom carousel shortcode
+    
+    Uses carousel/carousel-item shortcodes for a slideshow experience.
+    The first item is marked as active for Bootstrap carousel.
+    """
+    
+    # Create carousel structure
+    carousel_parts = ['## Tour of the Streams API\n\n']
+    
+    # Build carousel container
+    carousel_parts.append('{{< carousel >}}\n')
+    
+    for i, video in enumerate(videos):
+        # First item needs to be active for Bootstrap carousel
+        active_attr = ' active="true"' if i == 0 else ''
+        # Number the video titles (1. Intro to Streams, 2. Creating...)
+        numbered_title = f"{i + 1}. {video['title']}"
+        carousel_parts.append(f'{{{{< carousel-item title="{numbered_title}"{active_attr} >}}}}\n')
+        # Use {{% %}} for nested shortcodes so Hugo processes them properly
+        carousel_parts.append(f'{{{{% youtube "{video["video_id"]}" %}}}}\n')
+        carousel_parts.append('{{< /carousel-item >}}\n')
+    
+    carousel_parts.append('{{< /carousel >}}\n')
+    
+    return ''.join(carousel_parts)
+
+def _transform_use_cases_to_cards(content: str, testimonials_data: list) -> str:
+    """Transform Kafka Streams use cases section to custom shortcode"""
+    import re
+    
+    logger.info("Transforming Kafka Streams use cases to custom shortcode")
+    
+    # Find the "Kafka Streams use cases" section
+    use_cases_pattern = re.compile(
+        r'(##\s+Kafka\s+Streams\s+use\s+cases\s*\n)(.*?)(?=\n##|\Z)',
+        re.MULTILINE | re.DOTALL | re.IGNORECASE
+    )
+    
+    match = use_cases_pattern.search(content)
+    if not match:
+        logger.warning("Kafka Streams use cases section not found")
+        return content
+    
+    # Replace the entire section content with the custom shortcode
+    # Keep the heading, replace everything else with the shortcode
+    replacement = match.group(1) + '\n{{< about/kstreams-users >}}\n\n'
+    
+    # Replace in content
+    content = content[:match.start()] + replacement + content[match.end():]
+    
+    logger.info("Replaced use cases section with {{< about/kstreams-users >}} shortcode")
+    
+    return content
+
+def _transform_code_to_tabs(content: str) -> str:
+    """Transform Java and Scala code blocks to tabbed panes with proper dedenting"""
+    import re
+    
+    logger.info("Transforming code blocks to tabbed panes")
+    
+    # Find the "Hello Kafka Streams" section
+    hello_section_pattern = re.compile(
+        r'##\s+Hello\s+Kafka\s+Streams\s*\n+(.*?)(?=\n##|\Z)',
+        re.MULTILINE | re.DOTALL
+    )
+    
+    match = hello_section_pattern.search(content)
+    if not match:
+        logger.warning("Hello Kafka Streams code section not found")
+        return content
+    
+    section_content = match.group(1)
+    
+    # Check if code is already in tabpanes - if so, extract and reprocess
+    if '{{< tabpane >}}' in section_content or '{{% tabpane %}}' in section_content:
+        return _reprocess_existing_tabpanes(content, match, section_content)
+    
+    # Otherwise, process from "Java Scala" labeled code or markdown blocks
+    return _process_raw_code_blocks(content, match, section_content)
+
+def _reprocess_existing_tabpanes(content: str, hello_match, section_content: str) -> str:
+    """Extract code from existing tabpanes, dedent properly, and rebuild"""
+    import re
+    
+    logger.info("Reprocessing existing tabpanes with proper dedenting")
+    
+    # Extract tabs with their headers and code
+    # Pattern: {{% tab header="Java" %}} or {{< tab header="Java" >}}
+    tab_pattern = re.compile(
+        r'\{{[%<]\s*tab\s+header="([^"]+)"\s*[%>]\}}\s*```(\w+)?\s*\n(.*?)```\s*\{{[%<]\s*/tab\s*[%>]\}}',
+        re.DOTALL
+    )
+    
+    tabs = []
+    for match in tab_pattern.finditer(section_content):
+        language_label = match.group(1)  # e.g., "Java", "Java 8+", "Scala"
+        code_lang = match.group(2) if match.group(2) else "java"  # e.g., "java", "scala"
+        code = match.group(3)
+        
+        # Dedent the code properly
+        dedented_code = _dedent_code_simple(code)
+        
+        tabs.append({
+            'label': language_label,
+            'lang': code_lang.lower(),
+            'code': dedented_code
+        })
+    
+    if not tabs:
+        logger.warning("No tabs found in existing tabpane")
+        return content
+    
+    logger.info(f"Found {len(tabs)} tabs to reprocess: {[t['label'] for t in tabs]}")
+    
+    # Rebuild tabpanes with dedented code
+    tabbed_code = _build_tabbed_code_from_tabs(tabs)
+    
+    # Find intro text before tabpane
+    intro_match = re.search(r'(.*?)\{{[%<]\s*tabpane\s*[%>]\}}', section_content, re.DOTALL)
+    intro_text = intro_match.group(1).strip() if intro_match else ""
+    
+    # Replace the section
+    replacement = intro_text + '\n\n' + tabbed_code if intro_text else tabbed_code
+    
+    match_start = hello_match.start()
+    match_end = hello_match.end()
+    content = content[:match_start] + '## Hello Kafka Streams\n\n' + replacement + '\n' + content[match_end:]
+    
+    return content
+
+def _process_raw_code_blocks(content: str, hello_match, section_content: str) -> str:
+    """Process code from 'Java Scala' labeled blocks or markdown code fences"""
+    import re
+    
+    # First try to find markdown code blocks
+    code_block_pattern = re.compile(r'```(?:java|scala)?\n(.*?)```', re.DOTALL)
+    code_blocks = code_block_pattern.findall(section_content)
+    
+    if len(code_blocks) >= 2:
+        # Markdown code blocks found - extract language labels from preceding text
+        # Look for "Java Scala" or "Java 8+ Scala" type labels
+        label_match = re.search(r'(Java[^`\n]*?)\s+(Scala[^`\n]*?)\s*\n', section_content)
+        java_label = label_match.group(1).strip() if label_match else "Java"
+        scala_label = label_match.group(2).strip() if label_match else "Scala"
+        
+        java_code = code_blocks[0].strip()
+        scala_code = code_blocks[1].strip()
+        
+        # Create tabs structure
+        tabs = [
+            {'label': java_label, 'lang': 'java', 'code': java_code},
+            {'label': scala_label, 'lang': 'scala', 'code': scala_code}
+        ]
+        
+        logger.info(f"Found markdown code blocks with labels: {java_label}, {scala_label}")
+        
+        # Build tabbed pane
+        tabbed_code = _build_tabbed_code_from_tabs(tabs)
+        
+        # Find intro text
+        intro_match = re.search(r'(.*?)(?:Java|```)', section_content, re.DOTALL)
+        intro_text = intro_match.group(1).strip() if intro_match else ""
+        
+        # Replace the section
+        replacement = intro_text + '\n\n' + tabbed_code if intro_text else tabbed_code
+        match_start = hello_match.start()
+        match_end = hello_match.end()
+        return content[:match_start] + '## Hello Kafka Streams\n\n' + replacement + '\n' + content[match_end:]
+    
+    # Try "Java Scala" labeled indented code
+    java_scala_match = re.search(r'(Java[^`\n]*?)\s+(Scala[^`\n]*?)\s*\n', section_content)
+    
+    if not java_scala_match:
+        logger.warning("Expected code blocks not found in any recognized format")
+        return content
+    
+    # Extract language labels
+    java_label = java_scala_match.group(1).strip()
+    scala_label = java_scala_match.group(2).strip()
+    
+    logger.info(f"Found labeled code blocks: {java_label}, {scala_label}")
+    
+    # Extract everything after "Java Scala" label
+    code_start = java_scala_match.end()
+    all_code = section_content[code_start:]
+    
+    # Stop at navigation links (Previous/Next) or other non-code content
+    nav_match = re.search(r'\n\s*\[Previous\]|\n\s*\* \* \*|\n\s*\*\s+\[', all_code)
+    if nav_match:
+        all_code = all_code[:nav_match.start()]
+    
+    all_code = all_code.strip()
+    
+    # Split by looking for Scala imports
+    scala_patterns = [
+        r'\n\s*import java\.util\.Properties\n\s*import java\.util\.concurrent',
+        r'\n\s*import org\.apache\.kafka\.streams\.scala',
+        r'\n\s*object \w+.*extends App'
+    ]
+    
+    scala_start_pos = None
+    for pattern in scala_patterns:
+        scala_match = re.search(pattern, all_code)
+        if scala_match:
+            scala_start_pos = scala_match.start() + 1
+            break
+    
+    if not scala_start_pos:
+        logger.warning("Could not identify Scala code start position")
+        return content
+    
+    java_code = all_code[:scala_start_pos - 1].rstrip()
+    scala_code = all_code[scala_start_pos:].rstrip()
+    
+    # Dedent the code
+    java_code = _dedent_code_simple(java_code)
+    scala_code = _dedent_code_simple(scala_code)
+    
+    # Create tabs structure
+    tabs = [
+        {'label': java_label, 'lang': 'java', 'code': java_code},
+        {'label': scala_label, 'lang': 'scala', 'code': scala_code}
+    ]
+    
+    # Build tabbed pane
+    tabbed_code = _build_tabbed_code_from_tabs(tabs)
+    
+    # Find intro text
+    intro_match = re.search(r'(.*?)Java', section_content, re.DOTALL)
+    intro_text = intro_match.group(1).strip() if intro_match else ""
+    
+    # Replace the section
+    replacement = intro_text + '\n\n' + tabbed_code if intro_text else tabbed_code
+    match_start = hello_match.start()
+    match_end = hello_match.end()
+    return content[:match_start] + '## Hello Kafka Streams\n\n' + replacement + '\n' + content[match_end:]
+
+def _dedent_code_simple(code_text: str) -> str:
+    """Remove 4 spaces from the beginning of each line"""
+    lines = code_text.split('\n')
+    result = []
+    for line in lines:
+        if line.startswith('    '):  # 4 spaces
+            result.append(line[4:])
+        else:
+            result.append(line)
+    return '\n'.join(result).strip()  # strip() to remove leading/trailing empty lines
+
+def _build_tabbed_code_from_tabs(tabs: list) -> str:
+    """Build Hugo Docsy tabbed pane from tabs structure"""
+    parts = []
+    parts.append('{{< tabpane >}}\n')
+    
+    for tab in tabs:
+        parts.append(f'{{{{% tab header="{tab["label"]}" %}}}}\n')
+        parts.append(f'```{tab["lang"]}\n')
+        parts.append(tab['code'])
+        parts.append('\n```\n')
+        parts.append('{{% /tab %}}\n')
+    
+    parts.append('{{< /tabpane >}}\n')
+    return ''.join(parts)
+
+def _build_tabbed_code(java_code: str, scala_code: str) -> str:
+    """Build Hugo Docsy tabbed pane for code (deprecated - use _build_tabbed_code_from_tabs)"""
+    tabs = [
+        {'label': 'Java', 'lang': 'java', 'code': java_code},
+        {'label': 'Scala', 'lang': 'scala', 'code': scala_code}
+    ]
+    return _build_tabbed_code_from_tabs(tabs)
+
+def _remove_redundant_links(content: str) -> str:
+    """Remove redundant navigation links (Previous/Next, Documentation, Kafka Streams)"""
+    import re
+    
+    logger.info("Removing redundant links")
+    
+    # Pattern 1: Remove Previous/Next navigation links
+    # Looking for: [Previous](/path) [Next](/path)
+    prev_next_pattern = re.compile(
+        r'\n\s*\[Previous\]\([^)]+\)\s*\[Next\]\([^)]+\)\s*\n?',
+        re.MULTILINE
+    )
+    content = prev_next_pattern.sub('\n', content)
+    
+    # Pattern 2: Remove the redundant Documentation/Kafka Streams links at the end
+    # Looking for: * [Documentation](/documentation)\n* [Kafka Streams](/streams)
+    redundant_links_pattern = re.compile(
+        r'\n\s*\*\s+\[Documentation\]\([^)]+\)\s*\n\s*\*\s+\[Kafka\s+Streams\]\([^)]+\)\s*\n?',
+        re.MULTILINE | re.IGNORECASE
+    )
+    content = redundant_links_pattern.sub('\n', content)
+    
+    return content
+
 # Register processors
 register_special_file_processor("committers", process_committers) 
 register_special_file_processor("powered-by", process_powered_by)
 register_special_file_processor("blog", process_blog)
-register_special_file_processor("cve-list", process_cve_list) 
+register_special_file_processor("cve-list", process_cve_list)
+# Disabled: streams/introduction.md is now handled by StreamsEnhancementStage
+# register_special_file_processor("streams-introduction", process_streams_introduction)
+
+def _remove_redundant_links(content: str) -> str:
+    """Remove redundant navigation links (Previous/Next, Documentation, Kafka Streams)"""
+    import re
+    
+    logger.info("Removing redundant links")
+    
+    # Pattern 1: Remove Previous/Next navigation links
+    # Looking for: [Previous](/path) [Next](/path)
+    prev_next_pattern = re.compile(
+        r'\n\s*\[Previous\]\([^)]+\)\s*\[Next\]\([^)]+\)\s*\n?',
+        re.MULTILINE
+    )
+    content = prev_next_pattern.sub('\n', content)
+    
+    # Pattern 2: Remove the redundant Documentation/Kafka Streams links at the end
+    # Looking for: * [Documentation](/documentation)\n* [Kafka Streams](/streams)
+    redundant_links_pattern = re.compile(
+        r'\n\s*\*\s+\[Documentation\]\([^)]+\)\s*\n\s*\*\s+\[Kafka\s+Streams\]\([^)]+\)\s*\n?',
+        re.MULTILINE | re.IGNORECASE
+    )
+    content = redundant_links_pattern.sub('\n', content)
+    
+    return content
+
+# Register processors
+register_special_file_processor("committers", process_committers) 
+register_special_file_processor("powered-by", process_powered_by)
+register_special_file_processor("blog", process_blog)
+register_special_file_processor("cve-list", process_cve_list)
+# Disabled: streams/introduction.md is now handled by StreamsEnhancementStage
+# register_special_file_processor("streams-introduction", process_streams_introduction) 
