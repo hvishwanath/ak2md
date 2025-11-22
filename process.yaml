@@ -3,6 +3,7 @@ auto_weight: true
 exclude_dirs: ['markdown', '.git', 'node_modules', '.history']
 static_dirs: ['generated', 'javadoc', 'images', 'diagrams', 'logos']
 sanitize_list: ["ops.html", "index.html", "upgrade-guide.html", "tutorial.html", "connect.html", "quickstart.html"]
+bypass_tables: ["ops.html"]
 # Global preprocessing defaults for markdown headings
 # These can be overridden at the section or file level
 preprocessing:
