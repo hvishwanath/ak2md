@@ -285,9 +285,6 @@ def process_blog(content: str, output_path: str) -> bool:
 title: "Blog"
 linkTitle: "Blog"
 weight: 40
-menu:
-  main:
-    weight: 40
 ---
 """
         with open(os.path.join(blog_dir, "_index.md"), 'w', encoding='utf-8') as f:

@@ -170,14 +170,14 @@ class SyncManager:
         self.merge_directory(src, dst, "data")
     
     def sync_static(self):
-        """Sync static directory using replace strategy."""
+        """Sync static directory using merge strategy."""
         self.log("=" * 80)
-        self.log("Syncing static directory (REPLACE strategy)")
+        self.log("Syncing static directory (MERGE strategy)")
         self.log("=" * 80)
         
         src = self.source_root / 'static'
         dst = self.dest_root / 'static'
-        self.replace_directory(src, dst, "static")
+        self.merge_directory(src, dst, "static")
     
     def run(self):
         """Execute the full sync process."""
@@ -246,7 +246,7 @@ Sync rules:
   - Doc version directories (from process.yaml): REPLACE strategy
   - content/en/blog and content/en/community: MERGE strategy
   - data: MERGE strategy
-  - static: REPLACE strategy
+  - static: MERGE strategy
 
 Examples:
   # Dry run to see what would be synced
