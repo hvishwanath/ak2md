@@ -555,15 +555,22 @@ def convert_html_to_md(html_content, context):
     h.ignore_links = False  # Set to True to ignore links
     h.ignore_images = False  # Set to True to ignore images
     h.ignore_emphasis = False  # Set to True to ignore emphasis (bold, italic)
-    bypass_list = context.get('rules', {}).get('bypass_tables', [])
+    h.ignore_emphasis = False  # Set to True to ignore emphasis (bold, italic)
+    
+    # New logic: Default is to bypass tables (True), unless file is in use_markdown_tables list
+    use_markdown_tables_list = context.get('rules', {}).get('use_markdown_tables', [])
     src_file = context.get('src_file_name', '')
-    h.bypass_tables = src_file in bypass_list
+    
+    # If file is in use_markdown_tables, we do NOT bypass (False).
+    # If file is NOT in list, we bypass (True).
+    h.bypass_tables = src_file not in use_markdown_tables_list
+    
     h.body_width = 0  # Set to 0 to prevent wrapping
     markdown_content = h.handle(html_content)
 
     # Post-process to escape '#' in metric names for files that bypass table conversion
     # This prevents '# of ...' from being interpreted as H1 headers
-    if src_file in bypass_list:
+    if h.bypass_tables:
         # Escape '# of' at the start of a line
         markdown_content = re.sub(r'(?m)^# of', r'\\# of', markdown_content)
 

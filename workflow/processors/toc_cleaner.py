@@ -56,7 +56,13 @@ class TocCleaner:
             # Apply all TOC removal patterns
             content = self._remove_table_of_contents(content)
             content = self._remove_config_param_reference_toc(content)
+            content = self._remove_table_of_contents(content)
+            content = self._remove_config_param_reference_toc(content)
             content = self._remove_navigation_breadcrumbs(content)
+            
+            # Specific cleaner for protocol.md manual TOC
+            if "protocol.md" in file_path.name:
+                content = self._remove_protocol_toc(content)
             
             # Only write if content changed
             if content != original_content:
@@ -91,6 +97,22 @@ class TocCleaner:
         # This matches lines with 2 or more consecutive markdown links
         pattern = r'^(\[[\w\s:]+\]\([^\)]+\)\s*){2,}\n\n'
         return re.sub(pattern, '', content, flags=re.MULTILINE)
+
+    def _remove_protocol_toc(self, content: str) -> str:
+        """Remove manual TOC from protocol.md files."""
+        # The TOC in protocol.md usually looks like a list starting with specific sections
+        # We'll use a regex that matches the structure described by the user
+        
+        # Pattern to match the specific TOC structure in protocol.md
+        # It typically starts with * Preliminaries and ends before the first real heading
+        pattern = r'^\s*\*\s+Preliminaries\n(?:^\s+\* .*\n)*'
+        
+        # Check if we find the start of the TOC
+        if re.search(pattern, content, re.MULTILINE):
+            logger.info("Found protocol.md manual TOC pattern, removing it")
+            return re.sub(pattern, '', content, flags=re.MULTILINE)
+            
+        return content
 
 
 def clean_toc_from_markdown(output_dir: Path) -> bool:

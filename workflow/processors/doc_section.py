@@ -68,7 +68,15 @@ class ProcessDocSection:
             remove_duplicate_title_heading,  # Remove duplicate H1 if it matches title
         ]
         
+        # Capture original context values to prevent leakage between files
+        original_up_level = self.context.get('up_level', False)
+        original_remove_numeric = self.context.get('remove_numeric', False)
+        
         for w, n in enumerate(self.section["files"], start=1):
+            # Reset context to original values for each file
+            self.context['up_level'] = original_up_level
+            self.context['remove_numeric'] = original_remove_numeric
+            
             # Determine destination file path first
             if "dst_file" in n:
                 dest_file = os.path.join(self.context["section_dir"], n['dst_file'])
