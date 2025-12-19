@@ -153,6 +153,38 @@ def process_markdown_headings(content, context):
 
     return processed_content, context
 
+def fix_malformed_headings(content, context):
+    """
+    Fix malformed headings that appear as list items.
+    
+    Converts:
+        1. #### Heading
+    To:
+        #### Heading
+        
+    Args:
+        content: Markdown content (string)
+        context: Processing context
+        
+    Returns:
+        Tuple of (processed_content, context)
+    """
+    if not isinstance(content, str):
+        return content, context
+        
+    # Regex to find list items that contain headings
+    # Matches: optional whitespace (horizontal only), number + dot, optional whitespace, heading marks, space, text
+    # Capture group 1: The heading part (#### Heading)
+    # Note: We use [ \t] instead of \s to avoid matching newlines
+    pattern = re.compile(r'^[ \t]*\d+\.[ \t]+(#{1,6}\s+.*)$', re.MULTILINE)
+    
+    processed_content = pattern.sub(r'\1', content)
+    
+    if processed_content != content:
+        logging.debug("Fixed malformed headings in content")
+        
+    return processed_content, context
+
 def _get_front_matter(context, values):
     template = context['front_matter']["template"]
     return template.format(**values)

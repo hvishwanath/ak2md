@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any
 
 from workflow.registry import WorkflowStepRegistry
-from utils import execute_step, write_file, update_front_matter, process_markdown_headings, process_markdown_links, split_markdown_by_heading, remove_duplicate_title_heading
+from utils import execute_step, write_file, update_front_matter, process_markdown_headings, process_markdown_links, split_markdown_by_heading, remove_duplicate_title_heading, fix_malformed_headings
 
 logger = logging.getLogger('ak2md-workflow.steps.processor-doc-section')
 
@@ -63,6 +63,7 @@ class ProcessDocSection:
         steps = [
             update_front_matter,
             process_markdown_headings,
+            fix_malformed_headings,
             process_markdown_links,
             remove_duplicate_title_heading,  # Remove duplicate H1 if it matches title
         ]
@@ -139,7 +140,8 @@ class ProcessDocSection:
         try:
             with open(src_file, 'r', encoding='utf-8') as md_file:
                 content = md_file.read()
-                
+            
+            content, self.context = execute_step(fix_malformed_headings, content, self.context)
             _, self.context = execute_step(split_markdown_by_heading, content, self.context)
             return True
         except Exception as e:

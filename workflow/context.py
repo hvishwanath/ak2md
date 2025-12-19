@@ -48,9 +48,12 @@ class WorkflowContext:
             rules_src = script_dir / "process.yaml"
         
         if rules_src.exists():
-            if not rules_dest.exists():
+            # Always copy to ensure we have the latest config
+            try:
                 shutil.copy2(rules_src, rules_dest)
                 logger.info(f"Copied process.yaml to workspace: {rules_dest}")
+            except Exception as e:
+                logger.warning(f"Failed to copy process.yaml: {e}")
         else:
             logger.error("process.yaml not found in current directory or script directory")
             raise FileNotFoundError("process.yaml not found. Please ensure it exists in the current directory or script directory.")

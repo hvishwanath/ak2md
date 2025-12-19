@@ -427,10 +427,10 @@ def process_cve_list(content: str, output_path: str) -> bool:
         
         logger.info(f"Processing cve-list.md, content length: {len(content)} characters")
         
-        # Update the front matter title
+        # Update the front matter title and aliases
         content = re.sub(
             r'title: Cve List',
-            'title: CVE List',
+            'title: CVE List\naliases:\n    - "/cve-list"\n    - "/cve-list.html"',
             content
         )
         

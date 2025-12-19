@@ -3,7 +3,10 @@ auto_weight: true
 exclude_dirs: ['markdown', '.git', 'node_modules', '.history']
 static_dirs: ['generated', 'javadoc', 'images', 'diagrams', 'logos']
 sanitize_list: ["ops.html", "index.html", "upgrade-guide.html", "tutorial.html", "connect.html", "quickstart.html"]
-bypass_tables: ["ops.html"]
+bypass_tables: ["ops.html", "security.html"]
+git_options:
+  branch: "asf-site"
+  commit: "71d204245b0b82abf01f3dc31a7e45b4c1547018"
 # Global preprocessing defaults for markdown headings
 # These can be overridden at the section or file level
 preprocessing:
@@ -42,6 +45,8 @@ doc_dirs:
   - "25"
   - "40"
   - "41"
+  - "42"
+  - "43"
 front_matter:
   template: |
     ---
@@ -63,9 +68,6 @@ link_updates:
   - search_str: "/protocol.md"
     action: replace
     value: "../design/protocol.md"
-  - search_str: "/documentation/"
-    action: substitute
-    value: "/"
   - search_str: "https://kafka.apache.org/cve-list#"
     action: substitute
     value: "/community/cve-list/#"
@@ -184,7 +186,7 @@ sections:
   - name: kafka-connect
     title: Kafka Connect
     tags:
-      - security
+      - connect
     strategy: split_markdown_by_heading
     # split by heading level 2
     strategy_params: [2]
