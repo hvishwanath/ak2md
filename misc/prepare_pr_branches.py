@@ -20,7 +20,7 @@ VERSIONS_CONFIG = [
     {"version": "4.3", "upstream_branch": "trunk"},
 ]
 
-VERSIONS_CONFIG = [{"version": "4.3", "upstream_branch": "trunk"}]
+# VERSIONS_CONFIG = [{"version": "4.3", "upstream_branch": "trunk"}]
 
 def get_dir_suffix(version):
     return version.replace(".", "")

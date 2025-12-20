@@ -22,6 +22,23 @@ from workflow.processors.special_files import (
 )
 from utils import HandleBarsContextBuilder
 
+LICENSE_HEADER = """<!--
+ Licensed to the Apache Software Foundation (ASF) under one or more
+ contributor license agreements.  See the NOTICE file distributed with
+ this work for additional information regarding copyright ownership.
+ The ASF licenses this file to You under the Apache License, Version 2.0
+ (the "License"); you may not use this file except in compliance with
+ the License.  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->"""
+
 logger = logging.getLogger('ak2md-workflow.stages')
 
 class CloneStage(WorkflowStage):
@@ -154,7 +171,17 @@ class PostProcessStage(WorkflowStage):
             if success:
                 self.logger.info("Creating documentation redirect files")
                 success = self._create_doc_redirects()
+
+            # Create legacy redirects
+            if success:
+                self.logger.info("Creating legacy redirect files")
+                success = self._create_legacy_redirects()
             
+            # Inject license headers
+            if success:
+                self.logger.info("Injecting license headers")
+                success = self._inject_license_headers()
+
             return success
                 
         except Exception as e:
@@ -352,6 +379,124 @@ class PostProcessStage(WorkflowStage):
             self.logger.error(f"Error generating shadow files from {source_dir}: {e}")
             import traceback
             self.logger.error(traceback.format_exc())
+
+    def _create_legacy_redirects(self) -> bool:
+        """Creates documentation/legacy-redirect.md for each version to handle /documentation.html redirects"""
+        try:
+            import re
+            
+            content_dir = self.context.output_dir / "content" / "en"
+            if not content_dir.exists():
+                return True
+
+            version_pattern = re.compile(r'^\d+')
+            
+            for item in content_dir.iterdir():
+                if item.is_dir() and version_pattern.match(item.name):
+                    version = item.name
+                    
+                    # 1. Clean up old location if it exists
+                    old_file = item / "legacy-redirect.md"
+                    if old_file.exists():
+                        try:
+                            old_file.unlink()
+                            self.logger.info(f"Removed old file: {old_file}")
+                        except Exception as e:
+                            self.logger.warning(f"Failed to remove {old_file}: {e}")
+
+                    # 2. Create in new location
+                    doc_dir = item / "documentation"
+                    doc_dir.mkdir(exist_ok=True)
+                    
+                    new_file = doc_dir / "legacy-redirect.md"
+                    
+                    content = (
+                        "---\n"
+                        "title: \"Documentation Redirect Legacy\"\n"
+                        f"url: \"/{version}/documentation.html\"\n"
+                        "robots: \"noindex\"\n"
+                        "_build:\n"
+                        "  list: false\n"
+                        "---\n\n"
+                        "{{< doc-redirect >}}\n"
+                    )
+                    
+                    try:
+                        with open(new_file, "w", encoding='utf-8') as f:
+                            f.write(content)
+                        self.logger.info(f"Created legacy redirect: {new_file}")
+                    except Exception as e:
+                        self.logger.error(f"Failed to create {new_file}: {e}")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error creating legacy redirects: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            return False
+
+    def _inject_license_headers(self) -> bool:
+        """Injects Apache License header into all valid .md files"""
+        try:
+            content_dir = self.context.output_dir / "content"
+            if not content_dir.exists():
+                return True
+            
+            count = 0
+            # Walk through all files
+            for md_file in content_dir.rglob("*.md"):
+                try:
+                    # Skip if not a file
+                    if not md_file.is_file():
+                        continue
+                        
+                    content = md_file.read_text(encoding='utf-8')
+                    
+                    # Idempotency check
+                    if "Licensed to the Apache Software Foundation (ASF)" in content:
+                        continue
+                    
+                    # Check for front matter
+                    if content.startswith("---"):
+                        # Find the second '---'
+                        second_sep_index = content.find("\n---", 3)
+                        if second_sep_index != -1:
+                            # Calculate insertion point: after "\n---" (length 4)
+                            insert_pos = second_sep_index + 4
+                            
+                            # Prepare replacement:
+                            # Start with newline (to ensure we are on new line after ---)
+                            # Checking if there is already a newline there
+                            
+                            # Better approach: split, insert, join
+                            front_matter_end = insert_pos
+                            
+                            pre_content = content[:front_matter_end]
+                            post_content = content[front_matter_end:]
+                            
+                            # Ensure proper spacing:
+                            # 1. Newline after --- (usually usually present in pre_content or start of post_content)
+                            # 2. LICENSE
+                            # 3. Newline after LICENSE
+                            
+                            # If post_content starts with newline, we can use it, or normalise
+                            
+                            new_content = f"{pre_content}\n\n{LICENSE_HEADER}\n{post_content}"
+                            
+                            md_file.write_text(new_content, encoding='utf-8')
+                            count += 1
+                except Exception as f_e:
+                    self.logger.warning(f"Failed to process {md_file}: {f_e}")
+
+            self.logger.info(f"Injected license headers into {count} files")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error injecting license headers: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            return False
 
 
 class ProcessSpecialFilesStage(WorkflowStage):
